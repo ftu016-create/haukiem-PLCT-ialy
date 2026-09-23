@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply font-sans text-slate-900 bg-slate-100 antialiased;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
