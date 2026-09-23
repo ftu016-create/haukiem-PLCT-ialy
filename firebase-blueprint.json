@@ -1,0 +1,50 @@
+{
+  "entities": {
+    "Report": {
+      "title": "Report",
+      "description": "Báo cáo hậu kiểm an toàn PCT và LCT tại Công ty Thủy điện Ialy",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the report"
+        },
+        "general": {
+          "type": "object",
+          "description": "General report information including title, location, report date, inspection period"
+        },
+        "pct": {
+          "type": "object",
+          "description": "PCT section containing statistics and list of non-compliant items"
+        },
+        "lct": {
+          "type": "object",
+          "description": "LCT section containing statistics and list of non-compliant items"
+        },
+        "recommendations": {
+          "type": "array",
+          "description": "List of recommendations"
+        },
+        "signatories": {
+          "type": "object",
+          "description": "List of participating members and lead signer title"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp in ISO format or number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "general", "pct", "lct", "recommendations", "signatories"]
+    }
+  },
+  "firestore": {
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Shared reports collection synchronized across all workstations"
+    }
+  }
+}

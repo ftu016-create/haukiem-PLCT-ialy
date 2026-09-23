@@ -3,6 +3,7 @@ import { LctStatistics, ViolationItem } from '../types/report';
 import { calculateLctPercentages } from '../utils/calculations';
 import { WORK_TYPES, STANDARD_REASONS, LCT_VIOLATION_OPTIONS, ViolationPreset } from '../data/commonViolations';
 import { QuickViolationsModal } from './QuickViolationsModal';
+import { StatNumberInput } from './StatNumberInput';
 import {
   BookmarkPlus,
   CheckCircle2,
@@ -138,12 +139,10 @@ export const LctSectionEditor: React.FC<LctSectionEditorProps> = ({
             <label className="block text-xs font-semibold text-blue-900 mb-1">
               Tổng LCT được cấp số
             </label>
-            <input
-              type="number"
-              min="0"
+            <StatNumberInput
               disabled={disabled}
               value={stats.totalIssued}
-              onChange={(e) => handleStatChange('totalIssued', parseInt(e.target.value))}
+              onChange={(val) => handleStatChange('totalIssued', val)}
               className="w-full text-lg font-bold text-blue-900 bg-white px-2.5 py-1.5 rounded-lg border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             />
             <div className="mt-1 text-xs text-blue-700 font-semibold">100% cơ số tính</div>
@@ -154,12 +153,10 @@ export const LctSectionEditor: React.FC<LctSectionEditorProps> = ({
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               LCT không thực hiện
             </label>
-            <input
-              type="number"
-              min="0"
+            <StatNumberInput
               disabled={disabled}
               value={stats.notExecuted}
-              onChange={(e) => handleStatChange('notExecuted', parseInt(e.target.value))}
+              onChange={(val) => handleStatChange('notExecuted', val)}
               className="w-full text-lg font-bold text-slate-800 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             />
             <div className="mt-1 text-xs text-slate-600 font-semibold flex justify-between">
@@ -173,12 +170,10 @@ export const LctSectionEditor: React.FC<LctSectionEditorProps> = ({
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               LCT giấy
             </label>
-            <input
-              type="number"
-              min="0"
+            <StatNumberInput
               disabled={disabled}
               value={stats.paperForm}
-              onChange={(e) => handleStatChange('paperForm', parseInt(e.target.value))}
+              onChange={(val) => handleStatChange('paperForm', val)}
               className="w-full text-lg font-bold text-slate-800 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             />
             <div className="mt-1 text-xs text-slate-600 font-semibold flex justify-between">
@@ -192,12 +187,10 @@ export const LctSectionEditor: React.FC<LctSectionEditorProps> = ({
             <label className="block text-xs font-semibold text-amber-900 mb-1">
               LCT không phù hợp
             </label>
-            <input
-              type="number"
-              min="0"
+            <StatNumberInput
               disabled={disabled}
               value={stats.nonCompliant}
-              onChange={(e) => handleNonCompliantCountChange(parseInt(e.target.value) || 0)}
+              onChange={(val) => handleNonCompliantCountChange(val)}
               className="w-full text-lg font-bold text-amber-900 bg-white px-2.5 py-1.5 rounded-lg border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-60"
             />
             <div className="mt-1 text-xs text-amber-800 font-semibold flex justify-between">

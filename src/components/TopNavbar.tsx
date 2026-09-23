@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Cloud,
   Download,
   Eye,
   FileDown,
@@ -62,6 +63,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                   <ShieldCheck className="w-3 h-3 text-emerald-600" />
                   Giao diện Admin
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Đồng bộ đám mây
                 </span>
               </div>
               <p className="hidden md:block text-[11px] text-slate-500 font-medium">

@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidReport(data, reportId) {
+      return data.keys().hasAll(['id', 'general', 'pct', 'lct', 'recommendations', 'signatories'])
+        && data.id is string
+        && data.id == reportId
+        && data.id.size() <= 128
+        && data.general is map
+        && data.pct is map
+        && data.lct is map
+        && data.recommendations is list
+        && data.signatories is map;
+    }
+
+    match /reports/{reportId} {
+      allow get, list: if true;
+      allow create: if isValidId(reportId) && isValidReport(request.resource.data, reportId);
+      allow update: if isValidId(reportId) && isValidReport(request.resource.data, reportId);
+      allow delete: if isValidId(reportId);
+    }
+  }
+}

@@ -59,6 +59,10 @@ export const GuestView: React.FC<GuestViewProps> = ({
                   <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                     Chỉ xem
                   </span>
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Đồng bộ trực tuyến ({allReports.length})
+                  </span>
                 </div>
                 <p className="text-[10px] sm:text-xs text-slate-600 font-medium truncate">
                   Biên bản hậu kiểm PCT, LCT

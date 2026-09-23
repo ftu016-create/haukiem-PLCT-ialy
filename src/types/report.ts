@@ -27,6 +27,7 @@ export interface LctStatistics {
 export interface ReportData {
   id: string;
   updatedAt: string;
+  createdAt?: string;
   general: {
     companyName: string; // e.g. "CÔNG TY THỦY ĐIỆN IALY"
     departmentName: string; // e.g. "PX VẬN HÀNH IALY"

@@ -83,6 +83,7 @@ export const GeneralInfoForm: React.FC<GeneralInfoFormProps> = ({
               max="12"
               disabled={disabled}
               value={general.month}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => {
                 const m = parseInt(e.target.value) || 1;
                 onChange({
@@ -107,6 +108,7 @@ export const GeneralInfoForm: React.FC<GeneralInfoFormProps> = ({
             max="2035"
             disabled={disabled}
             value={general.year}
+            onFocus={(e) => e.target.select()}
             onChange={(e) => {
               const y = parseInt(e.target.value) || 2026;
               onChange({

@@ -16,6 +16,8 @@ import {
   saveReportToServer,
   syncAllReportsToServer,
   deleteReportFromServer,
+  subscribeToSharedReports,
+  syncLocalReportsToCloud,
 } from './utils/apiSync';
 import { exportReportToWord } from './utils/exportWord';
 import { exportReportToPdf, printDocument } from './utils/exportPdf';
@@ -89,29 +91,45 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // 1. Initial multi-device server data fetch
+  // 1. Multi-device real-time sync with Firebase Firestore
   useEffect(() => {
     let isMounted = true;
-    fetchReportsFromServer().then((serverReports) => {
-      if (!isMounted) return;
-      if (serverReports && serverReports.length > 0) {
-        setSavedReports(serverReports);
-        // If current report id not in server reports, select first
-        const exists = serverReports.some((r) => r.id === currentReportId);
-        if (!exists) {
-          setCurrentReportId(serverReports[0].id);
-          setReport(serverReports[0]);
-        } else {
-          const current = serverReports.find((r) => r.id === currentReportId);
-          if (current) setReport(current);
-        }
-      } else {
-        // Server empty, seed with initial report
-        syncAllReportsToServer(savedReports);
-      }
+
+    // Migrate any local reports from localStorage to Firestore so other computers can see them immediately
+    syncLocalReportsToCloud(savedReports).catch((err) => {
+      console.warn('Initial cloud migration check:', err);
     });
+
+    // Listen to real-time updates from Firestore across all devices
+    const unsubscribe = subscribeToSharedReports(
+      (cloudReports) => {
+        if (!isMounted) return;
+        if (cloudReports && cloudReports.length > 0) {
+          setSavedReports(cloudReports);
+          setCurrentReportId((prevId) => {
+            const exists = cloudReports.some((r) => r.id === prevId);
+            if (!exists) {
+              setReport(cloudReports[0]);
+              return cloudReports[0].id;
+            } else {
+              const current = cloudReports.find((r) => r.id === prevId);
+              if (current) setReport(current);
+              return prevId;
+            }
+          });
+        } else {
+          // If cloud is empty, seed with current reports
+          syncAllReportsToServer(savedReports);
+        }
+      },
+      (error) => {
+        console.warn('Realtime subscription fallback:', error);
+      }
+    );
+
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 

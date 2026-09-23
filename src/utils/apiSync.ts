@@ -1,55 +1,75 @@
 import { ReportData } from '../types/report';
+import {
+  saveReportToCloud,
+  deleteReportFromCloud,
+  syncLocalReportsToCloud,
+  subscribeToSharedReports,
+  db,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 
 export async function fetchReportsFromServer(): Promise<ReportData[] | null> {
   try {
-    const res = await fetch('/api/reports');
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (Array.isArray(data.reports) && data.reports.length > 0) {
-      return data.reports;
+    const colRef = collection(db, 'reports');
+    const snapshot = await getDocs(colRef);
+    if (!snapshot.empty) {
+      const reports: ReportData[] = [];
+      snapshot.forEach((docSnap) => {
+        reports.push(docSnap.data() as ReportData);
+      });
+      reports.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+      return reports;
     }
   } catch (err) {
-    console.warn('Cannot fetch reports from server, using local fallback:', err);
+    handleFirestoreError(err, OperationType.GET, 'reports');
   }
   return null;
 }
 
 export async function saveReportToServer(report: ReportData): Promise<boolean> {
   try {
-    const res = await fetch('/api/reports/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report }),
-    });
-    return res.ok;
+    await saveReportToCloud(report);
+    return true;
   } catch (err) {
-    console.error('Error saving report to server:', err);
+    console.error('Error saving report to Firestore:', err);
     return false;
   }
 }
 
 export async function syncAllReportsToServer(reports: ReportData[]): Promise<boolean> {
+  if (!reports || reports.length === 0) return true;
   try {
-    const res = await fetch('/api/reports/sync-all', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reports }),
-    });
-    return res.ok;
+    const batch = writeBatch(db);
+    for (const rep of reports) {
+      if (rep.id) {
+        batch.set(doc(db, 'reports', rep.id), {
+          ...rep,
+          updatedAt: rep.updatedAt || new Date().toISOString(),
+        });
+      }
+    }
+    await batch.commit();
+    return true;
   } catch (err) {
-    console.error('Error syncing reports to server:', err);
+    handleFirestoreError(err, OperationType.WRITE, 'reports');
     return false;
   }
 }
 
 export async function deleteReportFromServer(id: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    return res.ok;
+    await deleteReportFromCloud(id);
+    return true;
   } catch (err) {
-    console.error('Error deleting report from server:', err);
+    console.error('Error deleting report from Firestore:', err);
     return false;
   }
 }
+
+export { subscribeToSharedReports, syncLocalReportsToCloud };
