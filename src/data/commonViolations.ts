@@ -35,14 +35,14 @@ export const STANDARD_REASONS = [
 // PCT Violation options
 export const PCT_VIOLATION_OPTIONS = [
   'Những thiết bị, đường dây, đoạn đường dây đã cắt điện: Không ghi Họ tên.',
-  'Phần D: Kết thúc công việc: Đơn vị công tác đã tích, khi ký xong không có dấu tích vào ô vuông',
+  'Phần D: Kết thúc công việc: Đơn vị công tác đã tích, khi ký xong không có dấu tích vào ô vuông.',
   'Mục 2. “Thủ tục cho phép công tác”: Người cho phép đã kiểm tra, đánh dấu nhưng không ghi rõ họ và tên',
   'Mục 6. “Kết thúc công tác” trên phần mềm không ký',
   'Mục 2.3. “Đã làm rào chắn và treo biển báo tại”: Đã nhận diện mối nguy nhưng thiếu mục treo biển báo',
   'Tại mục 6. Kết thúc công tác: Người CHTT không đánh dấu vào 03 mục khẳng định trước khi giao cho Người cho phép.',
   'Không tải phiếu giấy.',
   'Tại mục 3.1: Người CHTT không tích vào ô Đơn vị QLVH đã thực hiện đủ và đúng các biện pháp an toàn',
-  'Tại mục 2.1. những thiết bị, đường dây, đoạn đường dây đã cắt điện: Người cho phép không điền tên ĐVQLVH và họ tên',
+  'Tại mục 2.1. Những thiết bị, đường dây, đoạn đường dây đã cắt điện: Người cho phép không điền tên ĐVQLVH và họ tên',
 ];
 
 // LCT Violation options

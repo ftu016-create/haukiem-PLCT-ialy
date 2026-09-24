@@ -54,18 +54,15 @@ export const GuestView: React.FC<GuestViewProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="font-black text-slate-900 text-sm sm:text-base tracking-tight truncate">
-                    ATVSLĐ IALY
+                    Biên bản hậu kiểm PCT, LCT
                   </span>
                   <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                     Chỉ xem
                   </span>
-                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Đồng bộ trực tuyến ({allReports.length})
-                  </span>
+                  
                 </div>
                 <p className="text-[10px] sm:text-xs text-slate-600 font-medium truncate">
-                  Biên bản hậu kiểm PCT, LCT
+                  VHIALY - Công ty thủy điện Ialy
                 </p>
               </div>
             </div>
@@ -153,10 +150,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
       <div className="bg-white/80 border-b border-slate-200 py-2 px-3 no-print">
         <div className="max-w-7xl mx-auto flex items-center justify-between text-xs text-slate-600">
           <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-medium">
-              Đồng bộ dữ liệu trực tuyến: Mở trên mọi máy tính và điện thoại
-            </span>
+            
           </div>
 
           {/* Zoom controls for comfortable reading */}
