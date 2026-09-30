@@ -7,6 +7,7 @@ import {
   PersonStat,
   StatisticsOverview,
 } from '../types';
+import { calculateWorkshopAnalysis } from '../engine/statisticsEngine';
 
 /**
  * Export official report directly to Microsoft Word (.doc)
@@ -29,6 +30,8 @@ export function exportToWord({
   reportMonth: number;
   reportYear: number;
 }) {
+  const workshopStats = calculateWorkshopAnalysis(records, personalStats);
+
   const titleText =
     reportType === 'month'
       ? `Về việc kết quả hậu kiểm PCT, LCT tháng ${reportMonth < 10 ? '0' + reportMonth : reportMonth}/${reportYear}`
@@ -210,9 +213,45 @@ export function exportToWord({
         : ''
     }
 
+    <!-- Section: Workshop Breakdown -->
+    <div style="font-weight: bold; font-size: 13pt; margin-top: 20px; margin-bottom: 6px;">
+      ${reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP THEO PHÂN XƯỞNG (PXVH & PXSC)
+    </div>
+    <div style="font-size: 11pt; font-style: italic; margin-bottom: 6px; color: #444;">
+      (Quy định phân định: Người CHTT, Nhân viên ĐCT thuộc Phân xưởng Sửa chữa; Người cấp phiếu, Người cho phép thuộc Phân xưởng Vận hành)
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Đơn vị / Phân xưởng</th>
+          <th>Chức danh quy định</th>
+          <th style="width: 80px;">Số cá nhân</th>
+          <th style="width: 110px;">Phiếu/Lệnh vi phạm</th>
+          <th style="width: 80px;">Tổng lỗi</th>
+          <th style="width: 90px;">Tỷ trọng (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${workshopStats
+          .map(
+            (ws) => `
+        <tr>
+          <td class="bold">${ws.workshopName} (${ws.shortName})</td>
+          <td>${ws.roles.join(', ')}</td>
+          <td class="text-center">${ws.peopleCount}</td>
+          <td class="text-center bold" style="color: #b91c1c;">${ws.violationDocuments}</td>
+          <td class="text-center bold" style="color: #b45309;">${ws.totalErrors}</td>
+          <td class="text-center bold">${ws.errorShare}%</td>
+        </tr>
+        `
+          )
+          .join('')}
+      </tbody>
+    </table>
+
     <!-- Section: Personal Analysis -->
     <div style="font-weight: bold; font-size: 13pt; margin-top: 20px; margin-bottom: 6px;">
-      ${reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP TRÁCH NHIỆM & CẢNH BÁO CÁ NHÂN
+      ${reportType === 'month' ? 'III.' : 'IV.'} TỔNG HỢP TRÁCH NHIỆM & CẢNH BÁO CÁ NHÂN
     </div>
     <table>
       <thead>

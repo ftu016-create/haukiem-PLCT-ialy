@@ -121,9 +121,25 @@ export interface StatisticsOverview {
   infoCount: number;
 }
 
+export type Workshop = 'Phân xưởng Sửa chữa' | 'Phân xưởng Vận hành' | 'Liên phân xưởng';
+
+export interface WorkshopStat {
+  workshopName: 'Phân xưởng Vận hành' | 'Phân xưởng Sửa chữa';
+  shortName: 'PXVH' | 'PXSC';
+  roles: string[];
+  totalErrors: number;
+  violationDocuments: number;
+  peopleCount: number;
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  errorShare: number; // Tỷ trọng lỗi (%)
+}
+
 export interface PersonStat {
   name: string;
   roles: string[];
+  workshop: Workshop;
   totalErrors: number;
   documentsCount: number;
   errorDocumentsCount: number; // Tổng số phiếu, lệnh (hồ sơ) vi phạm

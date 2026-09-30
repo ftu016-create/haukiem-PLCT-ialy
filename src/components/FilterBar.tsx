@@ -1,5 +1,16 @@
 import React from 'react';
-import { Search, RotateCcw, Filter, Calendar } from 'lucide-react';
+import {
+  Search,
+  RotateCcw,
+  Filter,
+  Calendar,
+  CalendarDays,
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Building2,
+  X,
+} from 'lucide-react';
 import { DocumentType, ErrorSeverity, FilterState } from '../types';
 
 interface FilterBarProps {
@@ -36,147 +47,44 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.statusFilter !== 'all' ||
     filters.searchQuery !== '';
 
+  const activeFilterCount = [
+    filters.year !== 2026,
+    filters.month !== 'all',
+    filters.documentType !== 'all',
+    filters.unit !== 'all',
+    filters.severity !== 'all',
+    filters.statusFilter !== 'all',
+    Boolean(filters.searchQuery),
+  ].filter(Boolean).length;
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs mb-6 print:hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Quick Filters */}
-        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 shrink-0">
-            <Filter className="w-3.5 h-3.5 text-blue-600" />
-            <span>Bộ lọc:</span>
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs mb-6 print:hidden">
+      {/* Top Header: Title, Active Filter Badge, Search Box, Reset */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Filter className="w-4 h-4" />
           </div>
-
-          {/* Year Select */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-slate-500">Năm:</span>
-            <select
-              value={filters.year}
-              onChange={(e) =>
-                onChangeFilters({
-                  ...filters,
-                  year: e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10),
-                })
-              }
-              className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer"
-            >
-              <option value="all">Tất cả năm</option>
-              {availableYears.map((yr) => (
-                <option key={yr} value={yr}>
-                  {yr}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Month Select */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-            <span className="text-slate-500">Tháng:</span>
-            <select
-              value={filters.month}
-              onChange={(e) =>
-                onChangeFilters({
-                  ...filters,
-                  month: e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10),
-                })
-              }
-              className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer"
-            >
-              <option value="all">Cả năm (12 tháng)</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  Tháng {m < 10 ? '0' + m : m}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Document Type (PCT vs LCT) */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-            <span className="text-slate-500">Loại:</span>
-            <select
-              value={filters.documentType}
-              onChange={(e) =>
-                onChangeFilters({
-                  ...filters,
-                  documentType: e.target.value as 'all' | DocumentType,
-                })
-              }
-              className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer"
-            >
-              <option value="all">Phiếu + Lệnh công tác</option>
-              <option value="PCT">Phiếu công tác (PCT)</option>
-              <option value="LCT">Lệnh công tác (LCT)</option>
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-            <span className="text-slate-500">Trạng thái:</span>
-            <select
-              value={filters.statusFilter}
-              onChange={(e) =>
-                onChangeFilters({
-                  ...filters,
-                  statusFilter: e.target.value as any,
-                })
-              }
-              className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer"
-            >
-              <option value="all">Tất cả hồ sơ</option>
-              <option value="error_only">Chỉ hồ sơ có sai sót</option>
-              <option value="valid_only">Chỉ hồ sơ hợp lệ</option>
-            </select>
-          </div>
-
-          {/* Severity Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-            <span className="text-slate-500">Mức lỗi:</span>
-            <select
-              value={filters.severity}
-              onChange={(e) =>
-                onChangeFilters({
-                  ...filters,
-                  severity: e.target.value as 'all' | ErrorSeverity,
-                })
-              }
-              className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer"
-            >
-              <option value="all">Tất cả mức độ</option>
-              <option value="CRITICAL">🔴 CRITICAL (Nghiêm trọng)</option>
-              <option value="WARNING">🟠 WARNING (Cảnh báo)</option>
-              <option value="INFO">🔵 INFO (Thông tin)</option>
-            </select>
-          </div>
-
-          {/* Unit Filter */}
-          {unitsList.length > 1 && (
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
-              <span className="text-slate-500">Đơn vị:</span>
-              <select
-                value={filters.unit}
-                onChange={(e) =>
-                  onChangeFilters({
-                    ...filters,
-                    unit: e.target.value,
-                  })
-                }
-                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer max-w-[130px] truncate"
-              >
-                <option value="all">Tất cả đơn vị</option>
-                {unitsList.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Bộ lọc dữ liệu
+              </span>
+              {isFiltered && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                  {activeFilterCount} điều kiện áp dụng
+                </span>
+              )}
             </div>
-          )}
+            <p className="text-[11px] text-slate-400">
+              Lọc Phiếu & Lệnh công tác theo thời gian, phân loại và tình trạng kiểm định
+            </p>
+          </div>
         </div>
 
-        {/* Right: Search & Reset */}
-        <div className="flex items-center gap-2 w-full lg:w-auto">
-          <div className="relative flex-1 lg:w-64">
+        {/* Search input & Reset button aligned */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-72">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -188,20 +96,173 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 })
               }
               placeholder="Tìm mã số, người, nội dung..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+              className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
             />
+            {filters.searchQuery && (
+              <button
+                onClick={() => onChangeFilters({ ...filters, searchQuery: '' })}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {isFiltered && (
             <button
               onClick={handleReset}
-              title="Đặt lại bộ lọc về mặc định"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition cursor-pointer shrink-0"
+              title="Đặt lại tất cả bộ lọc về mặc định"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer shrink-0 shadow-2xs"
             >
-              <RotateCcw className="w-3 h-3 text-slate-500" />
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
               <span>Đặt lại</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Grid of Structured Columns */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3">
+        {/* 1. NĂM */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar className="w-3 h-3 text-blue-600" />
+            <span>Năm</span>
+          </label>
+          <select
+            value={filters.year}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                year: e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10),
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer"
+          >
+            <option value="all">Tất cả các năm</option>
+            {availableYears.map((yr) => (
+              <option key={yr} value={yr}>
+                {yr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 2. THÁNG */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <CalendarDays className="w-3 h-3 text-blue-600" />
+            <span>Tháng</span>
+          </label>
+          <select
+            value={filters.month}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                month: e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10),
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer"
+          >
+            <option value="all">Cả năm (12 tháng)</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                Tháng {m < 10 ? '0' + m : m}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 3. LOẠI */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <FileText className="w-3 h-3 text-blue-600" />
+            <span>Loại</span>
+          </label>
+          <select
+            value={filters.documentType}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                documentType: e.target.value as 'all' | DocumentType,
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
+          >
+            <option value="all">Phiếu + Lệnh công tác</option>
+            <option value="PCT">Phiếu công tác (PCT)</option>
+            <option value="LCT">Lệnh công tác (LCT)</option>
+          </select>
+        </div>
+
+        {/* 4. TRẠNG THÁI */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3 text-blue-600" />
+            <span>Trạng thái</span>
+          </label>
+          <select
+            value={filters.statusFilter}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                statusFilter: e.target.value as any,
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="error_only">Chỉ bản ghi có vi phạm</option>
+            <option value="valid_only">Chỉ bản ghi hợp lệ</option>
+          </select>
+        </div>
+
+        {/* 5. MỨC LỖI */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <AlertTriangle className="w-3 h-3 text-blue-600" />
+            <span>Mức lỗi</span>
+          </label>
+          <select
+            value={filters.severity}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                severity: e.target.value as 'all' | ErrorSeverity,
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
+          >
+            <option value="all">Tất cả mức độ</option>
+            <option value="CRITICAL">🔴 CRITICAL (Nghiêm trọng)</option>
+            <option value="WARNING">🟠 WARNING (Cảnh báo)</option>
+            <option value="INFO">🔵 INFO (Thông tin)</option>
+          </select>
+        </div>
+
+        {/* 6. ĐƠN VỊ */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <Building2 className="w-3 h-3 text-blue-600" />
+            <span>Đơn vị</span>
+          </label>
+          <select
+            value={filters.unit}
+            onChange={(e) =>
+              onChangeFilters({
+                ...filters,
+                unit: e.target.value,
+              })
+            }
+            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
+          >
+            <option value="all">Tất cả đơn vị</option>
+            {unitsList.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>

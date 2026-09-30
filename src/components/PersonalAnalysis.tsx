@@ -17,10 +17,14 @@ export const PersonalAnalysis: React.FC<PersonalAnalysisProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPerson, setSelectedPerson] = useState<PersonStat | null>(null);
+  const [workshopFilter, setWorkshopFilter] = useState<'all' | 'Phân xưởng Vận hành' | 'Phân xưởng Sửa chữa'>('all');
 
-  const filteredStats = personalStats.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStats = personalStats.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+    if (workshopFilter === 'all') return true;
+    return p.workshop === workshopFilter || p.workshop === 'Liên phân xưởng';
+  });
 
   // Get records for selected person
   const personRecords = selectedPerson
@@ -43,15 +47,52 @@ export const PersonalAnalysis: React.FC<PersonalAnalysisProps> = ({
             </h2>
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Tìm theo họ tên..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Workshop filter tabs */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                onClick={() => setWorkshopFilter('all')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                  workshopFilter === 'all'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tất cả ({personalStats.length})
+              </button>
+              <button
+                onClick={() => setWorkshopFilter('Phân xưởng Vận hành')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                  workshopFilter === 'Phân xưởng Vận hành'
+                    ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>⚡ PX Vận hành</span>
+              </button>
+              <button
+                onClick={() => setWorkshopFilter('Phân xưởng Sửa chữa')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                  workshopFilter === 'Phân xưởng Sửa chữa'
+                    ? 'bg-white text-amber-700 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>🔧 PX Sửa chữa</span>
+              </button>
+            </div>
+
+            {/* Search box */}
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm theo họ tên..."
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -76,7 +117,22 @@ export const PersonalAnalysis: React.FC<PersonalAnalysisProps> = ({
                     <h3 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition flex items-center gap-1.5">
                       {person.name}
                     </h3>
-                    <div className="flex flex-wrap gap-1 mt-1">
+                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                          person.workshop === 'Phân xưởng Sửa chữa'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : person.workshop === 'Phân xưởng Vận hành'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-purple-50 text-purple-800 border-purple-200'
+                        }`}
+                      >
+                        {person.workshop === 'Phân xưởng Sửa chữa'
+                          ? '🔧 PX Sửa chữa'
+                          : person.workshop === 'Phân xưởng Vận hành'
+                          ? '⚡ PX Vận hành'
+                          : '⚡🔧 Liên PX'}
+                      </span>
                       {person.roles.map((r) => (
                         <span
                           key={r}
@@ -197,7 +253,7 @@ export const PersonalAnalysis: React.FC<PersonalAnalysisProps> = ({
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Vai trò: {selectedPerson.roles.join(' • ')} | Tổng số lỗi: {selectedPerson.totalErrors} | {personRecords.length} Phiếu/Lệnh liên đới
+                  Đơn vị: <strong className="text-slate-700">{selectedPerson.workshop}</strong> • Vai trò: {selectedPerson.roles.join(' • ')} | Tổng số lỗi: {selectedPerson.totalErrors} | {personRecords.length} Phiếu/Lệnh liên đới
                 </p>
               </div>
               <button

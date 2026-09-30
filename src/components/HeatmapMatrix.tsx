@@ -51,10 +51,10 @@ export const HeatmapMatrix: React.FC<HeatmapMatrixProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div>
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <span>Ma trận Heatmap Người - Tháng (Năm {targetYear})</span>
+            <span>Thống kê năm</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Theo dõi số lượng Phiếu và Lệnh công tác vi phạm và cảnh báo cá nhân tự động
+            Theo dõi số lượng Phiếu và Lệnh công tác vi phạm và cảnh báo cá nhân tự động (Năm {targetYear})
           </p>
         </div>
 
@@ -90,7 +90,7 @@ export const HeatmapMatrix: React.FC<HeatmapMatrixProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4 py-3 px-3 bg-slate-50/80 rounded-xl my-4 text-xs text-slate-600 border border-slate-200/60">
         <div className="flex items-center gap-4">
           <span className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">
-            Quy ước màu Heatmap:
+            Quy ước mức độ vi phạm:
           </span>
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-4 rounded bg-slate-100 border border-slate-200 inline-block"></span>

@@ -13,6 +13,7 @@ import {
   RoleStat,
   StatisticsOverview,
 } from '../types';
+import { calculateWorkshopAnalysis } from '../engine/statisticsEngine';
 import { exportToWord, triggerPrintReport } from '../utils/exportService';
 
 interface ReportViewProps {
@@ -42,6 +43,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [reportYear, setReportYear] = useState<number>(
     filters.year === 'all' ? 2026 : filters.year
   );
+
+  const workshopStats = calculateWorkshopAnalysis(records, personalStats);
 
   const handleExportWord = () => {
     exportToWord({
@@ -335,10 +338,59 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         )}
 
-        {/* Section 3: Personal Table */}
+        {/* Section: Workshop Breakdown */}
+        <div className="mb-6">
+          <h3 className="text-xs font-bold uppercase text-slate-900 mb-2 flex flex-wrap items-center justify-between gap-1">
+            <span>{reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP THEO PHÂN XƯỞNG (PXVH & PXSC)</span>
+            <span className="text-[10px] text-slate-500 font-normal italic lowercase">
+              (CHTT, ĐCT thuộc PX Sửa chữa; Cấp phiếu, Cho phép thuộc PX Vận hành)
+            </span>
+          </h3>
+
+          <div className="border border-slate-300 rounded-lg overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center">
+                <tr>
+                  <th className="py-2 px-3 text-left border-r border-slate-300">Đơn vị / Phân xưởng</th>
+                  <th className="py-2 px-3 text-left border-r border-slate-300">Chức danh quy định</th>
+                  <th className="py-2 px-3 border-r border-slate-300">Số cá nhân</th>
+                  <th className="py-2 px-3 border-r border-slate-300">Số Phiếu/Lệnh vi phạm</th>
+                  <th className="py-2 px-3 border-r border-slate-300">Tổng số lỗi</th>
+                  <th className="py-2 px-3">Tỷ trọng lỗi (%)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {workshopStats.map((ws) => (
+                  <tr key={ws.shortName} className="hover:bg-slate-50">
+                    <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200">
+                      {ws.workshopName} ({ws.shortName})
+                    </td>
+                    <td className="py-2 px-3 text-slate-600 text-[11px] border-r border-slate-200">
+                      {ws.roles.join(', ')}
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono border-r border-slate-200">
+                      {ws.peopleCount}
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono text-rose-600 font-bold border-r border-slate-200">
+                      {ws.violationDocuments}
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono font-black text-amber-600 border-r border-slate-200">
+                      {ws.totalErrors}
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono font-bold">
+                      {ws.errorShare}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Section: Personal Table */}
         <div className="mb-6">
           <h3 className="text-xs font-bold uppercase text-slate-900 mb-2">
-            {reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP TRÁCH NHIỆM & CẢNH BÁO CÁ NHÂN
+            {reportType === 'month' ? 'III.' : 'IV.'} TỔNG HỢP TRÁCH NHIỆM & CẢNH BÁO CÁ NHÂN
           </h3>
           <div className="border border-slate-300 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">

@@ -149,8 +149,10 @@ export default function App() {
   }, [normalizedRecords]);
 
   const unitsList = useMemo(() => {
-    const units = Array.from(new Set(normalizedRecords.map((r) => r.unit).filter(Boolean))).sort();
-    return units;
+    const rawUnits = Array.from(new Set(normalizedRecords.map((r) => r.unit).filter(Boolean)));
+    const fixedUnits = ['Phân xưởng Vận hành', 'Phân xưởng Sửa chữa'];
+    const otherUnits = rawUnits.filter((u) => !fixedUnits.includes(u)).sort();
+    return [...fixedUnits, ...otherUnits];
   }, [normalizedRecords]);
 
   // Google Sheets Live Sync Handler
@@ -300,7 +302,7 @@ export default function App() {
           </button>
           <span className="text-xs font-bold text-slate-800">
             {activeTab === 'dashboard' && 'Tổng quan'}
-            {activeTab === 'heatmap' && 'Ma trận Heatmap Người - Tháng'}
+            {activeTab === 'heatmap' && 'Thống kê năm'}
             {activeTab === 'personal' && 'Thống kê Cá nhân liên quan'}
             {activeTab === 'errors' && 'Nội dung lỗi'}
             {activeTab === 'records' && 'Danh sách & Tra cứu'}

@@ -6,6 +6,8 @@ import {
   PersonStat,
   RoleStat,
   StatisticsOverview,
+  Workshop,
+  WorkshopStat,
 } from '../types';
 
 /**
@@ -28,10 +30,23 @@ export function applyFilters(records: NormalizedRecord[], filters: FilterState):
       return false;
     }
 
-    // Unit filter
+    // Unit / Workshop filter (Hỗ trợ lọc theo Phân xưởng Vận hành & Phân xưởng Sửa chữa)
     if (filters.unit && filters.unit !== 'all') {
-      if (!rec.unit.toLowerCase().includes(filters.unit.toLowerCase())) {
-        return false;
+      const u = filters.unit.toLowerCase();
+      if (u.includes('sửa chữa') || u === 'pxsc') {
+        const matchesUnit = rec.unit.toLowerCase().includes('sửa chữa');
+        const hasLeader = rec.leader && !rec.leader.includes('Chưa rõ');
+        if (!matchesUnit && !hasLeader) return false;
+      } else if (u.includes('vận hành') || u === 'pxvh') {
+        const matchesUnit = rec.unit.toLowerCase().includes('vận hành');
+        const hasIssuerOrApprover =
+          (rec.issuer && !rec.issuer.includes('Chưa rõ')) ||
+          (rec.approver && !rec.approver.includes('Chưa rõ') && !rec.approver.includes('Không áp dụng'));
+        if (!matchesUnit && !hasIssuerOrApprover) return false;
+      } else {
+        if (!rec.unit.toLowerCase().includes(filters.unit.toLowerCase())) {
+          return false;
+        }
       }
     }
 
@@ -350,9 +365,39 @@ export function calculatePersonalAnalysis(
     // 2. Trong năm: Có phiếu/lệnh vi phạm ở >= 2 tháng khác nhau trong năm
     const hasYearlyAlert = monthsWithErrorsCount >= 2;
 
+    // Phân loại Phân xưởng theo quy tắc:
+    // CHTT, Chỉ huy trực tiếp, Nhân viên ĐCT -> Phân xưởng Sửa chữa.
+    // Còn lại (Cấp phiếu, Cho phép, Trực ban, Trưởng ca...) -> Phân xưởng Vận hành.
+    const rolesArr = Array.from(data.roles);
+    let hasSC = false;
+    let hasVH = false;
+    rolesArr.forEach((r) => {
+      const lower = r.toLowerCase();
+      if (
+        lower.includes('chtt') ||
+        lower.includes('chỉ huy') ||
+        lower.includes('chi huy') ||
+        lower.includes('đct') ||
+        lower.includes('đội công tác') ||
+        lower.includes('doi cong tac')
+      ) {
+        hasSC = true;
+      } else {
+        hasVH = true;
+      }
+    });
+
+    let workshop: Workshop = 'Phân xưởng Vận hành';
+    if (hasSC && hasVH) {
+      workshop = 'Liên phân xưởng';
+    } else if (hasSC) {
+      workshop = 'Phân xưởng Sửa chữa';
+    }
+
     result.push({
       name,
-      roles: Array.from(data.roles),
+      roles: rolesArr,
+      workshop,
       totalErrors: data.totalErrors,
       documentsCount: data.docsCount,
       errorDocumentsCount: data.errorDocsCount,
@@ -524,4 +569,99 @@ export function calculateCategoryBreakdown(records: NormalizedRecord[]): {
     count: map[cat],
     percentage: totalParsed > 0 ? Math.round((map[cat] / totalParsed) * 1000) / 10 : 0,
   }));
+}
+
+/**
+ * Workshop Breakdown Engine:
+ * Phân xưởng Sửa chữa (PXSC): Người CHTT, Nhân viên Đội công tác (ĐCT), Người chỉ huy trực tiếp.
+ * Phân xưởng Vận hành (PXVH): Người cấp phiếu, Người cho phép, Trực ban, Trưởng ca.
+ */
+export function calculateWorkshopAnalysis(
+  records: NormalizedRecord[],
+  personalStats: PersonStat[]
+): WorkshopStat[] {
+  let vhErrors = 0;
+  let scErrors = 0;
+  let vhCritical = 0;
+  let scCritical = 0;
+  let vhWarning = 0;
+  let scWarning = 0;
+  let vhInfo = 0;
+  let scInfo = 0;
+
+  const vhViolationDocs = new Set<string>();
+  const scViolationDocs = new Set<string>();
+
+  records.forEach((rec) => {
+    if (rec.result === 'Có sai sót' || rec.errorCount > 0 || rec.parsedErrors.length > 0) {
+      const respRoles = getResponsibleRolesFromErrors(rec.parsedErrors, rec.rawErrors);
+
+      const hasSC = respRoles.has('leader');
+      const hasVH = respRoles.has('issuer') || respRoles.has('approver');
+
+      if (hasSC) scViolationDocs.add(rec.id);
+      if (hasVH) vhViolationDocs.add(rec.id);
+
+      rec.parsedErrors.forEach((err) => {
+        const text = (err.message + ' ' + (err.ruleReference || '')).toLowerCase();
+        const isSC =
+          text.includes('chtt') ||
+          text.includes('chỉ huy') ||
+          text.includes('chi huy') ||
+          text.includes('nhân viên') ||
+          text.includes('đội công tác') ||
+          text.includes('đct') ||
+          text.includes('điều 30');
+
+        if (isSC) {
+          scErrors++;
+          if (err.severity === 'CRITICAL') scCritical++;
+          else if (err.severity === 'WARNING') scWarning++;
+          else if (err.severity === 'INFO') scInfo++;
+        } else {
+          vhErrors++;
+          if (err.severity === 'CRITICAL') vhCritical++;
+          else if (err.severity === 'WARNING') vhWarning++;
+          else if (err.severity === 'INFO') vhInfo++;
+        }
+      });
+    }
+  });
+
+  const vhPeople = personalStats.filter(
+    (p) => p.workshop === 'Phân xưởng Vận hành' || p.workshop === 'Liên phân xưởng'
+  ).length;
+
+  const scPeople = personalStats.filter(
+    (p) => p.workshop === 'Phân xưởng Sửa chữa' || p.workshop === 'Liên phân xưởng'
+  ).length;
+
+  const totalErrors = Math.max(vhErrors + scErrors, 1);
+
+  return [
+    {
+      workshopName: 'Phân xưởng Vận hành',
+      shortName: 'PXVH',
+      roles: ['Người cấp phiếu', 'Người cho phép', 'Trực ban', 'Trưởng ca'],
+      totalErrors: vhErrors,
+      violationDocuments: vhViolationDocs.size,
+      peopleCount: vhPeople,
+      criticalCount: vhCritical,
+      warningCount: vhWarning,
+      infoCount: vhInfo,
+      errorShare: Math.round((vhErrors / totalErrors) * 100),
+    },
+    {
+      workshopName: 'Phân xưởng Sửa chữa',
+      shortName: 'PXSC',
+      roles: ['Người CHTT', 'Người chỉ huy trực tiếp', 'Nhân viên ĐCT', 'Nhân viên đội công tác'],
+      totalErrors: scErrors,
+      violationDocuments: scViolationDocs.size,
+      peopleCount: scPeople,
+      criticalCount: scCritical,
+      warningCount: scWarning,
+      infoCount: scInfo,
+      errorShare: Math.round((scErrors / totalErrors) * 100),
+    },
+  ];
 }

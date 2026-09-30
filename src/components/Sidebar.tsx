@@ -55,8 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'heatmap' as ActiveTab,
-      label: 'Ma trận Người - Tháng',
-      desc: 'Heatmap tần suất lỗi 12 tháng',
+      label: 'Thống kê năm',
+      desc: 'Tần suất lỗi 12 tháng',
       icon: Grid3X3,
     },
     {
