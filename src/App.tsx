@@ -1,682 +1,466 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ReportData } from './types/report';
-import { INITIAL_SAMPLE_REPORT } from './data/sampleReport';
-import { TopNavbar, ViewMode } from './components/TopNavbar';
-import { GuestView } from './components/GuestView';
-import { GeneralInfoForm } from './components/GeneralInfoForm';
-import { PctSectionEditor } from './components/PctSectionEditor';
-import { LctSectionEditor } from './components/LctSectionEditor';
-import { RecommendationsEditor } from './components/RecommendationsEditor';
-import { SignatoriesEditor } from './components/SignatoriesEditor';
-import { ReportDocumentPreview } from './components/ReportDocumentPreview';
-import { SavedReportsModal } from './components/SavedReportsModal';
-import { AdminLoginModal } from './components/AdminLoginModal';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  fetchReportsFromServer,
-  saveReportToServer,
-  syncAllReportsToServer,
-  deleteReportFromServer,
-  subscribeToSharedReports,
-  syncLocalReportsToCloud,
-} from './utils/apiSync';
-import { exportReportToWord } from './utils/exportWord';
-import { exportReportToPdf, printDocument } from './utils/exportPdf';
-import { svgToPngArrayBuffer } from './utils/chartToImage';
+  AuditLogEntry,
+  FilterState,
+  NormalizedRecord,
+  SyncState,
+  UserRole,
+} from './types';
 import {
-  Building2,
-  CheckCircle,
-  ClipboardList,
+  DEFAULT_RAW_CSV,
+  formatGoogleSheetsCsvUrl,
+  parseCSVToRawRecords,
+} from './utils/csvParser';
+import { processRawRecords } from './engine/normalization';
+import {
+  applyFilters,
+  calculateOverview,
+  calculatePersonalAnalysis,
+  calculateRoleAnalysis,
+  calculateYearlyStatistics,
+} from './engine/statisticsEngine';
+import { Header } from './components/Header';
+import { Sidebar, ActiveTab } from './components/Sidebar';
+import { FilterBar } from './components/FilterBar';
+import { KpiCards } from './components/KpiCards';
+import { ErrorProportionCharts } from './components/Charts/ErrorProportionCharts';
+import { MonthlyCharts } from './components/Charts/MonthlyCharts';
+import { HeatmapMatrix } from './components/HeatmapMatrix';
+import { PersonalAnalysis } from './components/PersonalAnalysis';
+import { ErrorAnalysis } from './components/ErrorAnalysis';
+import { DataTable } from './components/DataTable';
+import { AuditView } from './components/AuditView';
+import { ReportView } from './components/ReportView';
+import { SettingsModal } from './components/SettingsModal';
+import { exportToWord, triggerPrintReport } from './utils/exportService';
+import {
+  Menu,
+  X,
   FileCheck2,
-  Lightbulb,
-  Plus,
-  Save,
-  Users,
+  Calendar,
+  Layers,
+  ShieldCheck,
+  CheckCircle2,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 
-const STORAGE_KEY = 'ialy_atvsld_reports_v2';
-const CURRENT_ID_KEY = 'ialy_atvsld_current_id_v2';
-const ADMIN_AUTH_KEY = 'ialy_is_admin_auth_v2';
-
 export default function App() {
-  // Admin authentication state
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(ADMIN_AUTH_KEY) === 'true';
-    } catch (e) {
-      return false;
-    }
+  // Persistent settings in localStorage
+  const [rawCsv, setRawCsv] = useState<string>(() => {
+    return localStorage.getItem('ialy_raw_csv') || DEFAULT_RAW_CSV;
   });
 
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-
-  // Initialize reports from local storage first
-  const [savedReports, setSavedReports] = useState<ReportData[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Error loading reports from localStorage', e);
-    }
-    return [INITIAL_SAMPLE_REPORT];
+  const [sheetUrl, setSheetUrl] = useState<string>(() => {
+    return localStorage.getItem('ialy_sheet_url') || '';
   });
 
-  const [currentReportId, setCurrentReportId] = useState<string>(() => {
-    try {
-      const storedId = localStorage.getItem(CURRENT_ID_KEY);
-      if (storedId) return storedId;
-    } catch (e) {}
-    return INITIAL_SAMPLE_REPORT.id;
+  const [adminPin, setAdminPin] = useState<string>(() => {
+    return localStorage.getItem('ialy_admin_pin') || 'ialy2026';
   });
 
-  const [report, setReport] = useState<ReportData>(() => {
-    const found = savedReports.find((r) => r.id === currentReportId);
-    return found || savedReports[0] || INITIAL_SAMPLE_REPORT;
+  const [userRole, setUserRole] = useState<UserRole>('ADMIN');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    year: 2026,
+    month: 'all',
+    documentType: 'all',
+    unit: 'all',
+    severity: 'all',
+    searchQuery: '',
+    statusFilter: 'all',
   });
 
-  const [viewMode, setViewMode] = useState<ViewMode>('editor');
-  const [activeTab, setActiveTab] = useState<'all' | 'general' | 'pct' | 'lct' | 'recommendations' | 'signatories'>('all');
-  const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
-  const [isExportingWord, setIsExportingWord] = useState(false);
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Sync state
+  const [syncState, setSyncState] = useState<SyncState>({
+    lastSyncTime: new Date().toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+    status: 'success',
+    sourceUrl: sheetUrl,
+    totalRawRows: 0,
+    totalUniqueRows: 0,
+    totalDuplicatesRemoved: 0,
+  });
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 2500);
-  };
+  // System Audit Logs stored across sessions
+  const [persistentLogs, setPersistentLogs] = useState<AuditLogEntry[]>([]);
 
-  // 1. Multi-device real-time sync with Firebase Firestore
+  // 1. Data Normalization & Duplicate Detection Pipeline
+  const { normalizedRecords, allParsedRecords, duplicatesRemovedCount, auditLogs } =
+    useMemo(() => {
+      const rawRecords = parseCSVToRawRecords(rawCsv);
+      return processRawRecords(rawRecords);
+    }, [rawCsv]);
+
+  // Update sync counts
   useEffect(() => {
-    let isMounted = true;
+    setSyncState((prev) => ({
+      ...prev,
+      totalRawRows: allParsedRecords.length,
+      totalUniqueRows: normalizedRecords.length,
+      totalDuplicatesRemoved: duplicatesRemovedCount,
+    }));
+  }, [allParsedRecords.length, normalizedRecords.length, duplicatesRemovedCount]);
 
-    // Migrate any local reports from localStorage to Firestore so other computers can see them immediately
-    syncLocalReportsToCloud(savedReports).catch((err) => {
-      console.warn('Initial cloud migration check:', err);
-    });
+  // Merge audit logs
+  const combinedAuditLogs = useMemo(() => {
+    return [...auditLogs, ...persistentLogs];
+  }, [auditLogs, persistentLogs]);
 
-    // Listen to real-time updates from Firestore across all devices
-    const unsubscribe = subscribeToSharedReports(
-      (cloudReports) => {
-        if (!isMounted) return;
-        if (cloudReports && cloudReports.length > 0) {
-          setSavedReports(cloudReports);
-          setCurrentReportId((prevId) => {
-            const exists = cloudReports.some((r) => r.id === prevId);
-            if (!exists) {
-              setReport(cloudReports[0]);
-              return cloudReports[0].id;
-            } else {
-              const current = cloudReports.find((r) => r.id === prevId);
-              if (current) setReport(current);
-              return prevId;
-            }
+  // 2. Filter Application
+  const filteredRecords = useMemo(() => {
+    return applyFilters(normalizedRecords, filters);
+  }, [normalizedRecords, filters]);
+
+  // 3. Central Statistics Engine Calculations
+  const overview = useMemo(() => {
+    return calculateOverview(filteredRecords);
+  }, [filteredRecords]);
+
+  const personalStats = useMemo(() => {
+    return calculatePersonalAnalysis(filteredRecords, filters.month);
+  }, [filteredRecords, filters.month]);
+
+  const roleStats = useMemo(() => {
+    return calculateRoleAnalysis(filteredRecords);
+  }, [filteredRecords]);
+
+  const monthlyStats = useMemo(() => {
+    const targetYear = filters.year === 'all' ? 2026 : filters.year;
+    return calculateYearlyStatistics(normalizedRecords, targetYear);
+  }, [normalizedRecords, filters.year]);
+
+  // Available metadata for filters
+  const availableYears = useMemo(() => {
+    const years = Array.from(new Set(normalizedRecords.map((r) => r.year))).sort((a, b) => b - a);
+    return years.length > 0 ? years : [2026];
+  }, [normalizedRecords]);
+
+  const unitsList = useMemo(() => {
+    const units = Array.from(new Set(normalizedRecords.map((r) => r.unit).filter(Boolean))).sort();
+    return units;
+  }, [normalizedRecords]);
+
+  // Google Sheets Live Sync Handler
+  const handleSync = useCallback(async () => {
+    setSyncState((prev) => ({ ...prev, status: 'syncing' }));
+
+    if (sheetUrl && sheetUrl.trim()) {
+      try {
+        const directCsvUrl = formatGoogleSheetsCsvUrl(sheetUrl);
+        // Fetch through standard proxy / direct CORS
+        const response = await fetch(directCsvUrl, { cache: 'no-cache' });
+        if (!response.ok) {
+          throw new Error(`Mã lỗi HTTP: ${response.status} (${response.statusText})`);
+        }
+        const csvText = await response.text();
+
+        if (csvText && csvText.includes(',')) {
+          setRawCsv(csvText);
+          localStorage.setItem('ialy_raw_csv', csvText);
+
+          const timeStr = new Date().toLocaleTimeString('vi-VN');
+          setSyncState({
+            lastSyncTime: timeStr,
+            status: 'success',
+            sourceUrl: sheetUrl,
+            totalRawRows: 0,
+            totalUniqueRows: 0,
+            totalDuplicatesRemoved: 0,
           });
+
+          setPersistentLogs((prev) => [
+            {
+              id: `sync-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              action: 'SYNC_SHEET',
+              title: 'Đồng bộ thành công từ Google Sheets',
+              details: `Đã kết nối và nạp dữ liệu mới nhất từ ${directCsvUrl}`,
+            },
+            ...prev,
+          ]);
+          return;
         } else {
-          // If cloud is empty, seed with current reports
-          syncAllReportsToServer(savedReports);
+          throw new Error('Định dạng phản hồi không phải là CSV hợp lệ');
         }
-      },
-      (error) => {
-        console.warn('Realtime subscription fallback:', error);
+      } catch (err: any) {
+        console.warn('Google Sheets live sync error:', err);
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'error',
+          errorMessage: err.message || 'Không thể kết nối đến Google Sheets',
+        }));
+        // Maintain existing local cache without losing data
       }
-    );
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  // 2. Sync to localStorage for local caching
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedReports));
-      localStorage.setItem(CURRENT_ID_KEY, currentReportId);
-    } catch (e) {
-      console.error('Failed to save to localStorage', e);
+    } else {
+      // Re-trigger parse from current dataset with a fresh timestamp
+      setTimeout(() => {
+        setSyncState((prev) => ({
+          ...prev,
+          status: 'success',
+          lastSyncTime: new Date().toLocaleTimeString('vi-VN'),
+        }));
+      }, 500);
     }
-  }, [savedReports, currentReportId]);
+  }, [sheetUrl]);
 
-  const handleLoginSuccess = () => {
-    setIsAdmin(true);
-    try {
-      localStorage.setItem(ADMIN_AUTH_KEY, 'true');
-    } catch (e) {}
-    setViewMode('editor');
-    showToast('Đăng nhập Quản trị viên thành công!');
+  // Update Sheet URL Handler
+  const handleUpdateSheetUrl = (newUrl: string) => {
+    setSheetUrl(newUrl);
+    localStorage.setItem('ialy_sheet_url', newUrl);
+    setSyncState((prev) => ({ ...prev, sourceUrl: newUrl }));
+    setTimeout(handleSync, 100);
   };
 
-  const handleLogout = () => {
-    setIsAdmin(false);
-    try {
-      localStorage.removeItem(ADMIN_AUTH_KEY);
-    } catch (e) {}
-    showToast('Đã chuyển về Giao diện xem của Khách');
+  // Upload CSV File Handler
+  const handleUploadCsvText = (csvContent: string) => {
+    setRawCsv(csvContent);
+    localStorage.setItem('ialy_raw_csv', csvContent);
+    setSyncState((prev) => ({
+      ...prev,
+      lastSyncTime: new Date().toLocaleTimeString('vi-VN'),
+      status: 'success',
+    }));
+    setPersistentLogs((prev) => [
+      {
+        id: `upload-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'SYNC_SHEET',
+        title: 'Tải tệp CSV ngoại tuyến thành công',
+        details: 'Đã nạp bộ dữ liệu mới từ tệp CSV tải lên từ máy tính cá nhân',
+      },
+      ...prev,
+    ]);
   };
 
-  // Update current report in list when report changes (Admin only)
-  const updateCurrentReport = (updater: (prev: ReportData) => ReportData) => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    setReport((prev) => {
-      const updated = updater(prev);
-      updated.updatedAt = new Date().toISOString();
-      setSavedReports((reports) =>
-        reports.map((r) => (r.id === updated.id ? updated : r))
-      );
-      return updated;
+  // Reset to Baseline Real Dataset
+  const handleResetToDefault = () => {
+    setRawCsv(DEFAULT_RAW_CSV);
+    localStorage.setItem('ialy_raw_csv', DEFAULT_RAW_CSV);
+    setSheetUrl('');
+    localStorage.removeItem('ialy_sheet_url');
+    setSyncState((prev) => ({
+      ...prev,
+      lastSyncTime: new Date().toLocaleTimeString('vi-VN'),
+      status: 'success',
+      sourceUrl: '',
+    }));
+  };
+
+  // Export handlers
+  const handleExportWord = () => {
+    exportToWord({
+      overview,
+      records: filteredRecords,
+      personalStats,
+      monthlyStats,
+      reportType: filters.month === 'all' ? 'year' : 'month',
+      reportMonth: filters.month === 'all' ? 9 : filters.month,
+      reportYear: filters.year === 'all' ? 2026 : filters.year,
     });
   };
 
-  // Manual explicit SAVE BUTTON handler (Unified across all devices)
-  const handleSaveReport = async () => {
-    setIsSaving(true);
-    try {
-      const updated = {
-        ...report,
-        updatedAt: new Date().toISOString(),
-      };
-      // 1. Save to server database
-      await saveReportToServer(updated);
-      await syncAllReportsToServer(savedReports.map((r) => (r.id === updated.id ? updated : r)));
-
-      // 2. Save local
-      setReport(updated);
-      setSavedReports((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r))
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedReports));
-
-      showToast('Đã lưu văn bản & đồng bộ thành công lên mọi thiết bị!');
-    } catch (err) {
-      console.error('Save error:', err);
-      showToast('Đã lưu vào bộ nhớ cục bộ');
-    } finally {
-      setIsSaving(false);
-    }
+  const handleExportPDF = () => {
+    triggerPrintReport();
   };
 
-  // Switch report
-  const handleSelectReport = (rep: ReportData) => {
-    setCurrentReportId(rep.id);
-    setReport(rep);
-  };
-
-  // Create new report
-  const handleNewReport = async () => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    const newDate = new Date();
-    const currentMonth = newDate.getMonth() + 1;
-    const currentYear = newDate.getFullYear();
-    const newId = `report-ialy-${Date.now()}`;
-    const newReport: ReportData = {
-      ...INITIAL_SAMPLE_REPORT,
-      id: newId,
-      updatedAt: newDate.toISOString(),
-      general: {
-        ...INITIAL_SAMPLE_REPORT.general,
-        month: currentMonth,
-        year: currentYear,
-        reportDate: newDate.toISOString().slice(0, 10),
-        reportSubtitle: `Về việc kết quả hậu kiểm PCT, LCT tháng ${currentMonth}/${currentYear}`,
-      },
-      pct: {
-        stats: { totalIssued: 0, notExecuted: 0, paperForm: 0, inProgress: 0, nonCompliant: 0 },
-        violations: [],
-      },
-      lct: {
-        stats: { totalIssued: 0, notExecuted: 0, paperForm: 0, nonCompliant: 0, notes: '/' },
-        violations: [],
-      },
-      signatories: {
-        ...INITIAL_SAMPLE_REPORT.signatories,
-        leadSignatureUrl: undefined,
-      },
-    };
-
-    const nextList = [newReport, ...savedReports];
-    setSavedReports(nextList);
-    setCurrentReportId(newId);
-    setReport(newReport);
-    setViewMode('editor');
-
-    // Save to server
-    await saveReportToServer(newReport);
-    await syncAllReportsToServer(nextList);
-    showToast('Đã tạo văn bản mới thành công!');
-  };
-
-  const handleDuplicateReport = async (rep: ReportData) => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    const duplicated: ReportData = {
-      ...JSON.parse(JSON.stringify(rep)),
-      id: `report-copy-${Date.now()}`,
-      updatedAt: new Date().toISOString(),
-      general: {
-        ...rep.general,
-        reportSubtitle: `${rep.general.reportSubtitle} (Bản sao)`,
-      },
-    };
-    const nextList = [duplicated, ...savedReports];
-    setSavedReports(nextList);
-    setCurrentReportId(duplicated.id);
-    setReport(duplicated);
-
-    await saveReportToServer(duplicated);
-    await syncAllReportsToServer(nextList);
-    showToast('Đã nhân bản báo cáo thành công!');
-  };
-
-  const handleDeleteReport = async (id: string) => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    const filtered = savedReports.filter((r) => r.id !== id);
-    setSavedReports(filtered);
-    if (filtered.length > 0 && currentReportId === id) {
-      setCurrentReportId(filtered[0].id);
-      setReport(filtered[0]);
-    }
-    await deleteReportFromServer(id);
-    await syncAllReportsToServer(filtered);
-    showToast('Đã xóa biên bản');
-  };
-
-  const handleImportReports = async (newReports: ReportData[]) => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    const nextList = [...newReports, ...savedReports];
-    setSavedReports(nextList);
-    if (newReports.length > 0) {
-      setCurrentReportId(newReports[0].id);
-      setReport(newReports[0]);
-    }
-    await syncAllReportsToServer(nextList);
-    showToast(`Đã nhập ${newReports.length} biên bản lên máy chủ`);
-  };
-
-  const handleResetToSample = async () => {
-    if (!isAdmin) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-    const sample = JSON.parse(JSON.stringify(INITIAL_SAMPLE_REPORT));
-    sample.id = `report-sample-${Date.now()}`;
-    const nextList = [sample, ...savedReports];
-    setSavedReports(nextList);
-    setCurrentReportId(sample.id);
-    setReport(sample);
-    await saveReportToServer(sample);
-    await syncAllReportsToServer(nextList);
-    showToast('Đã nạp văn bản mặc định');
-  };
-
-  // Export to Word (Available to both Guest and Admin)
-  const handleExportWord = async () => {
-    setIsExportingWord(true);
-    try {
-      let pctBytes: Uint8Array | null = null;
-      let lctBytes: Uint8Array | null = null;
-
-      const pctSvg = document.getElementById('svg-pct-chart') as unknown as SVGSVGElement | null;
-      if (pctSvg) {
-        pctBytes = await svgToPngArrayBuffer(pctSvg);
-      }
-
-      const lctSvg = document.getElementById('svg-lct-chart') as unknown as SVGSVGElement | null;
-      if (lctSvg) {
-        lctBytes = await svgToPngArrayBuffer(lctSvg);
-      }
-
-      await exportReportToWord(report, pctBytes, lctBytes);
-    } catch (err) {
-      console.error('Export word error:', err);
-      alert('Có lỗi khi xuất file Word. Vui lòng thử lại!');
-    } finally {
-      setIsExportingWord(false);
-    }
-  };
-
-  // Export to PDF (Available to both Guest and Admin)
-  const handleExportPdf = async () => {
-    setIsExportingPdf(true);
-    try {
-      const filename = `Bao_cao_hau_kiem_PCT_LCT_${report.general.month}_${report.general.year}.pdf`;
-      const success = await exportReportToPdf('report-document-root', filename);
-      if (!success) {
-        printDocument();
-      }
-    } catch (err) {
-      printDocument();
-    } finally {
-      setIsExportingPdf(false);
-    }
-  };
-
-  // ==========================================
-  // GIAO DIỆN 1: GIAO DIỆN NGƯỜI CHƯA ĐĂNG NHẬP (KHÁCH)
-  // ==========================================
-  if (!isAdmin) {
-    return (
-      <>
-        {/* Hidden preview container for SVG chart export if needed */}
-        <div className="hidden">
-          <ReportDocumentPreview data={report} />
-        </div>
-
-        <GuestView
-          currentReport={report}
-          allReports={savedReports}
-          onSelectReport={handleSelectReport}
-          onOpenHistoryModal={() => setIsSavedModalOpen(true)}
-          onExportWord={handleExportWord}
-          onExportPdf={handleExportPdf}
-          onPrint={printDocument}
-          isExportingWord={isExportingWord}
-          isExportingPdf={isExportingPdf}
-          onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        />
-
-        {/* Saved Reports Modal in Read-only view for Guest */}
-        <SavedReportsModal
-          isOpen={isSavedModalOpen}
-          onClose={() => setIsSavedModalOpen(false)}
-          savedReports={savedReports}
-          currentReportId={currentReportId}
-          onSelectReport={handleSelectReport}
-          onDeleteReport={handleDeleteReport}
-          onNewReport={handleNewReport}
-          onDuplicateReport={handleDuplicateReport}
-          onImportReports={handleImportReports}
-          onResetToSample={handleResetToSample}
-          isAdmin={false}
-          onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        />
-
-        {/* Admin Login Modal */}
-        <AdminLoginModal
-          isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          onLoginSuccess={handleLoginSuccess}
-        />
-      </>
-    );
-  }
-
-  // ==========================================
-  // GIAO DIỆN 2: GIAO DIỆN QUẢN TRỊ VIÊN (ADMIN)
-  // ==========================================
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-      {/* Top Navbar for Admin */}
-      <TopNavbar
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      {/* Top Header */}
+      <Header
+        syncState={syncState}
+        onSync={handleSync}
+        onOpenSheetsModal={() => setIsSettingsOpen(true)}
+        role={userRole}
+        onChangeRole={setUserRole}
         onExportWord={handleExportWord}
-        onExportPdf={handleExportPdf}
-        onPrint={printDocument}
-        onOpenSavedModal={() => setIsSavedModalOpen(true)}
-        onSaveReport={handleSaveReport}
-        isSaving={isSaving}
-        isExportingWord={isExportingWord}
-        isExportingPdf={isExportingPdf}
-        isAdmin={true}
-        onOpenLoginModal={() => {}}
-        onLogout={handleLogout}
+        onExportPDF={handleExportPDF}
       />
 
-      {/* Persistent Toast */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-2xl animate-in fade-in slide-in-from-bottom-2 no-print">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+      {/* Mobile Navigation Header */}
+      <div className="md:hidden bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between print:hidden">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-1.5 rounded-lg bg-slate-100 text-slate-700"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+          <span className="text-xs font-bold text-slate-800">
+            {activeTab === 'dashboard' && 'Tổng quan'}
+            {activeTab === 'heatmap' && 'Ma trận Heatmap Người - Tháng'}
+            {activeTab === 'personal' && 'Thống kê Cá nhân liên quan'}
+            {activeTab === 'errors' && 'Nội dung lỗi'}
+            {activeTab === 'records' && 'Danh sách & Tra cứu'}
+            {activeTab === 'reports' && 'Báo cáo & Xuất file'}
+            {activeTab === 'settings' && 'Cấu hình'}
+          </span>
         </div>
-      )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
-        {/* Hidden preview container for SVG chart export when in Editor view */}
-        <div className="hidden">
-          <ReportDocumentPreview data={report} />
-        </div>
+        <button
+          onClick={handleSync}
+          className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold"
+        >
+          Đồng bộ
+        </button>
+      </div>
 
-        {/* View Mode: Editor Only (Admin) */}
-        {viewMode === 'editor' && (
-          <div className="max-w-5xl mx-auto">
-            {/* Quick section navigation pills & Save bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-4 border-b border-slate-200">
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+      {/* Main Container */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto">
+        {/* Desktop Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          role={userRole}
+          duplicateCount={duplicatesRemovedCount}
+          anomalyCount={0}
+        />
+
+        {/* Mobile Sidebar Overlay */}
+        {mobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex">
+            <div className="w-64 bg-white h-full shadow-2xl flex flex-col">
+              <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-900">Danh mục chức năng</span>
                 <button
-                  onClick={() => setActiveTab('all')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'all'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1 rounded-lg bg-slate-100"
                 >
-                  Tất cả các phần
-                </button>
-                <button
-                  onClick={() => setActiveTab('general')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'general'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  Thông tin chung
-                </button>
-                <button
-                  onClick={() => setActiveTab('pct')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'pct'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
-                >
-                  <FileCheck2 className="w-3.5 h-3.5" />
-                  I. Phiếu công tác (PCT)
-                </button>
-                <button
-                  onClick={() => setActiveTab('lct')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'lct'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
-                >
-                  <ClipboardList className="w-3.5 h-3.5" />
-                  II. Lệnh công tác (LCT)
-                </button>
-                <button
-                  onClick={() => setActiveTab('recommendations')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'recommendations'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
-                >
-                  <Lightbulb className="w-3.5 h-3.5" />
-                  III. Kiến nghị
-                </button>
-                <button
-                  onClick={() => setActiveTab('signatories')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                    activeTab === 'signatories'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-200'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  Thành viên & Ký duyệt
+                  <X className="w-4 h-4 text-slate-600" />
                 </button>
               </div>
-
-              {/* Action buttons on top of editor */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleNewReport}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-2xs transition"
-                >
-                  <Plus className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Tạo văn bản mới</span>
-                </button>
-              </div>
-            </div>
-
-            {/* General Info */}
-            {(activeTab === 'all' || activeTab === 'general') && (
-              <GeneralInfoForm
-                general={report.general}
-                onChange={(updated) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    general: { ...prev.general, ...updated },
-                  }))
-                }
-              />
-            )}
-
-            {/* PCT Section */}
-            {(activeTab === 'all' || activeTab === 'pct') && (
-              <PctSectionEditor
-                stats={report.pct.stats}
-                violations={report.pct.violations}
-                onStatsChange={(stats) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    pct: { ...prev.pct, stats },
-                  }))
-                }
-                onViolationsChange={(violations) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    pct: { ...prev.pct, violations },
-                  }))
-                }
-              />
-            )}
-
-            {/* LCT Section */}
-            {(activeTab === 'all' || activeTab === 'lct') && (
-              <LctSectionEditor
-                stats={report.lct.stats}
-                violations={report.lct.violations}
-                onStatsChange={(stats) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    lct: { ...prev.lct, stats },
-                  }))
-                }
-                onViolationsChange={(violations) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    lct: { ...prev.lct, violations },
-                  }))
-                }
-              />
-            )}
-
-            {/* Recommendations Section */}
-            {(activeTab === 'all' || activeTab === 'recommendations') && (
-              <RecommendationsEditor
-                recommendations={report.recommendations}
-                onChange={(recommendations) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    recommendations,
-                  }))
-                }
-              />
-            )}
-
-            {/* Signatories Section */}
-            {(activeTab === 'all' || activeTab === 'signatories') && (
-              <SignatoriesEditor
-                signatories={report.signatories}
-                onChange={(updated) =>
-                  updateCurrentReport((prev) => ({
-                    ...prev,
-                    signatories: { ...prev.signatories, ...updated },
-                  }))
-                }
-              />
-            )}
-
-            {/* Sticky/Prominent Save Bar at Bottom */}
-            <div className="mt-8 p-4 bg-white rounded-2xl border border-slate-200 shadow-lg flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold text-slate-800">
-                  Hoàn thành chỉnh sửa báo cáo?
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  Nhấn "Lưu văn bản" để cập nhật nội dung đồng bộ lên tất cả máy tính và điện thoại.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('preview')}
-                  className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition"
-                >
-                  Xem trước A4
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveReport}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-md transition disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSaving ? 'Đang lưu vào máy chủ...' : 'Lưu văn bản'}</span>
-                </button>
+              <div className="flex-1 overflow-y-auto">
+                <Sidebar
+                  activeTab={activeTab}
+                  onSelectTab={(tab) => {
+                    setActiveTab(tab);
+                    setMobileMenuOpen(false);
+                  }}
+                  role={userRole}
+                  duplicateCount={duplicatesRemovedCount}
+                  anomalyCount={0}
+                />
               </div>
             </div>
           </div>
         )}
 
-        {/* View Mode: Preview Only (Admin) */}
-        {viewMode === 'preview' && (
-          <div className="w-full flex justify-center">
-            <ReportDocumentPreview data={report} />
-          </div>
-        )}
-      </main>
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto">
+          {/* Universal Filter Bar (shown on views that benefit from dynamic filtering) */}
+          {activeTab !== 'settings' && (
+            <FilterBar
+              filters={filters}
+              onChangeFilters={setFilters}
+              availableYears={availableYears}
+              unitsList={unitsList}
+            />
+          )}
 
-      {/* Saved Reports Modal */}
-      <SavedReportsModal
-        isOpen={isSavedModalOpen}
-        onClose={() => setIsSavedModalOpen(false)}
-        savedReports={savedReports}
-        currentReportId={currentReportId}
-        onSelectReport={handleSelectReport}
-        onDeleteReport={handleDeleteReport}
-        onNewReport={handleNewReport}
-        onDuplicateReport={handleDuplicateReport}
-        onImportReports={handleImportReports}
-        onResetToSample={handleResetToSample}
-        isAdmin={true}
-        onOpenLoginModal={() => {}}
+          {/* TAB: DASHBOARD */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <KpiCards overview={overview} />
+              {/* 3 Biểu đồ tròn theo yêu cầu vị trí 1, 2, 3 */}
+              <ErrorProportionCharts overview={overview} />
+              <MonthlyCharts
+                monthlyData={monthlyStats}
+                targetYear={filters.year === 'all' ? 2026 : filters.year}
+              />
+              <HeatmapMatrix
+                personalStats={personalStats.slice(0, 10)}
+                targetYear={filters.year === 'all' ? 2026 : filters.year}
+                onSelectPerson={(name) => {
+                  setFilters((prev) => ({ ...prev, searchQuery: name }));
+                  setActiveTab('records');
+                }}
+              />
+              <DataTable records={filteredRecords} />
+            </div>
+          )}
+
+          {/* TAB: HEATMAP MATRIX */}
+          {activeTab === 'heatmap' && (
+            <HeatmapMatrix
+              personalStats={personalStats}
+              targetYear={filters.year === 'all' ? 2026 : filters.year}
+              onSelectPerson={(name) => {
+                setFilters((prev) => ({ ...prev, searchQuery: name }));
+                setActiveTab('records');
+              }}
+            />
+          )}
+
+          {/* TAB: PERSONAL ANALYSIS */}
+          {activeTab === 'personal' && (
+            <PersonalAnalysis
+              personalStats={personalStats}
+              records={normalizedRecords}
+              selectedMonth={filters.month}
+            />
+          )}
+
+          {/* TAB: ERROR ANALYSIS */}
+          {activeTab === 'errors' && <ErrorAnalysis records={filteredRecords} />}
+
+          {/* TAB: RECORDS & SEARCH */}
+          {activeTab === 'records' && <DataTable records={filteredRecords} />}
+
+
+
+          {/* TAB: REPORTS & EXPORT */}
+          {activeTab === 'reports' && (
+            <ReportView
+              overview={overview}
+              records={filteredRecords}
+              allParsedRecords={allParsedRecords}
+              personalStats={personalStats}
+              roleStats={roleStats}
+              monthlyStats={monthlyStats}
+              filters={filters}
+              auditLogs={combinedAuditLogs}
+            />
+          )}
+
+          {/* TAB: SETTINGS (ADMIN) */}
+          {activeTab === 'settings' && (
+            <div className="max-w-2xl mx-auto">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="w-full py-4 px-6 rounded-2xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition"
+              >
+                Mở Bảng Điều Khiển Cấu hình Nguồn Dữ liệu & Quản trị
+              </button>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        syncState={syncState}
+        onUpdateSheetUrl={handleUpdateSheetUrl}
+        onUploadCsvText={handleUploadCsvText}
+        onResetToDefault={handleResetToDefault}
+        role={userRole}
+        onChangePin={(newP) => {
+          setAdminPin(newP);
+          localStorage.setItem('ialy_admin_pin', newP);
+        }}
       />
     </div>
   );

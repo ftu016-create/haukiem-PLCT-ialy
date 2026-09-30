@@ -1,5 +1,6 @@
 {
-  "name": "Hệ thống Báo cáo Hậu kiểm PCT & LCT - Thủy điện Ialy",
-  "description": "Phần mềm lập báo cáo tự động kết quả hậu kiểm Phiếu công tác (PCT) và Lệnh công tác (LCT) cho Công ty Thủy điện Ialy. Tự động tính phần trăm, vẽ biểu đồ thanh ngang, xuất Word và PDF chuẩn EVN, phân quyền Admin và Khách, đồng bộ đa thiết bị.",
-  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "Hệ thống Quản lý & Giám sát Hậu kiểm Phiếu - Lệnh Công tác",
+  "description": "Ứng dụng web chuyên nghiệp giám sát, phân tích lỗi, đồng bộ Google Sheets, lọc bản ghi trùng lặp tuyệt đối và thống kê an toàn lao động.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
