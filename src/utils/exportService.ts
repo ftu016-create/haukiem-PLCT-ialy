@@ -1,7 +1,4 @@
-import * as XLSX from 'xlsx';
 import {
-  AuditLogEntry,
-  FilterState,
   MonthlyBreakdown,
   NormalizedRecord,
   PersonStat,
@@ -11,7 +8,13 @@ import { calculateWorkshopAnalysis } from '../engine/statisticsEngine';
 
 /**
  * Export official report directly to Microsoft Word (.doc)
- * Fully compliant with EVN administrative document layout standards (Nghị định 30/2020/NĐ-CP)
+ * Fully compliant with EVN administrative document layout standards (Nghị định 30/2020/NĐ-CP):
+ * - Page format: A4
+ * - Font: Times New Roman, cỡ chữ 13pt
+ * - Margins: Lề trái 3cm (30mm), lề trên 2cm (20mm), lề dưới 2cm (20mm), lề phải 2cm (20mm)
+ * - Paragraph Spacing: Before 6pt, After 6pt, Line spacing Single
+ * - Pure black text for all document contents and tables (không tô màu nền bảng)
+ * - Charts retain visual color indicators (biểu đồ có màu)
  */
 export function exportToWord({
   overview,
@@ -21,6 +24,8 @@ export function exportToWord({
   reportType,
   reportMonth,
   reportYear,
+  customNotes,
+  evaluationNote,
 }: {
   overview: StatisticsOverview;
   records: NormalizedRecord[];
@@ -29,6 +34,8 @@ export function exportToWord({
   reportType: 'month' | 'year';
   reportMonth: number;
   reportYear: number;
+  customNotes?: { [key: number]: string };
+  evaluationNote?: string;
 }) {
   const workshopStats = calculateWorkshopAnalysis(records, personalStats);
 
@@ -37,6 +44,17 @@ export function exportToWord({
       ? `Về việc kết quả hậu kiểm PCT, LCT tháng ${reportMonth < 10 ? '0' + reportMonth : reportMonth}/${reportYear}`
       : `Về việc kết quả hậu kiểm PCT, LCT năm ${reportYear}`;
 
+  // Ghi chú mặc định để trống cho thoáng theo yêu cầu người dùng
+  const notes = {
+    1: customNotes?.[1] || '',
+    2: customNotes?.[2] || '',
+    3: customNotes?.[3] || '',
+    4: customNotes?.[4] || '',
+    5: customNotes?.[5] || '',
+    6: customNotes?.[6] || '',
+    7: customNotes?.[7] || '',
+  };
+
   const htmlContent = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
@@ -44,8 +62,8 @@ export function exportToWord({
   <title>Báo cáo hậu kiểm PCT, LCT</title>
   <style>
     @page Section1 {
-      size: 595.3pt 841.9pt; /* A4 */
-      margin: 1.5cm 1.5cm 1.5cm 2.0cm;
+      size: 595.3pt 841.9pt; /* Khổ A4 chuẩn */
+      margin: 2.0cm 2.0cm 2.0cm 3.0cm; /* Lề chuẩn Nghị định 30: Trên 2cm, Dưới 2cm, Phải 2cm, Trái 3cm */
       mso-header-margin: 36.0pt;
       mso-footer-margin: 36.0pt;
       mso-paper-source: 0;
@@ -57,71 +75,178 @@ export function exportToWord({
       line-height: 1.35;
       color: #000000;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      margin-bottom: 12px;
+    p, div.p-spacing {
+      margin-top: 5pt;
+      margin-bottom: 5pt;
+      line-height: 1.35;
+      color: #000000;
     }
-    th, td {
-      border: 1px solid #333333;
-      padding: 6px 8px;
-      font-size: 12pt;
-      vertical-align: middle;
+    .report-title {
+      font-size: 15pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      text-align: center;
+      margin-top: 6pt;
+      margin-bottom: 4pt;
+      color: #000000;
     }
-    th {
-      background-color: #f2f2f2;
+    .report-subtitle {
+      font-size: 13pt;
       font-weight: bold;
       text-align: center;
+      margin-top: 0;
+      margin-bottom: 14pt;
+      color: #000000;
+    }
+    .section-title {
+      font-weight: bold;
+      font-size: 13pt;
+      margin-top: 14pt;
+      margin-bottom: 6pt;
+      color: #000000;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6pt;
+      margin-bottom: 12pt;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 13pt;
+      color: #000000;
+    }
+    table.data-table th, table.data-table td {
+      border: 1px solid #000000;
+      padding: 6pt 8pt;
+      font-size: 13pt;
+      font-family: 'Times New Roman', Times, serif;
+      vertical-align: middle;
+      color: #000000;
+      line-height: 1.35;
+      background-color: transparent !important;
+    }
+    table.data-table th {
+      font-weight: bold;
+      text-align: center;
+      background-color: transparent !important;
     }
     .header-table, .header-table td {
       border: none !important;
-      padding: 2px 4px;
+      padding: 0;
+      background-color: transparent !important;
     }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .bold { font-weight: bold; }
     .italic { font-style: italic; }
     .uppercase { text-transform: uppercase; }
+    .chart-card {
+      padding: 10pt;
+      vertical-align: top;
+      border-radius: 6pt;
+      background-color: #ffffff;
+    }
   </style>
 </head>
 <body>
   <div class="Section1">
-    <!-- Header Block -->
-    <table class="header-table" style="width: 100%; margin-bottom: 20px;">
+    <!-- Header Block Chuẩn văn bản hành chính -->
+    <table class="header-table" style="width: 100%; margin-bottom: 14pt;">
       <tr>
-        <td style="width: 45%; text-align: center; vertical-align: top;">
-          <div style="font-size: 11pt; font-weight: bold;">CÔNG TY THỦY ĐIỆN IALY</div>
-          <div style="font-size: 11pt; font-weight: bold; color: #1e3a8a;">PX VẬN HÀNH IALY</div>
-          <div style="width: 100px; border-bottom: 1px solid #000; margin: 4px auto 0 auto;"></div>
+        <td style="width: 45%; text-align: center; vertical-align: top; padding: 0;">
+          <div style="font-size: 12pt; font-weight: bold; color: #000000; text-transform: uppercase;">CÔNG TY THỦY ĐIỆN IALY</div>
+          <div style="font-size: 12pt; font-weight: bold; color: #000000; text-transform: uppercase;">PX VẬN HÀNH IALY</div>
+          <div style="width: 110px; border-bottom: 1px solid #000000; margin: 3pt auto 0 auto;"></div>
         </td>
-        <td style="width: 55%; text-align: center; vertical-align: top;">
-          <div style="font-size: 11pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
-          <div style="font-size: 11pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</div>
-          <div style="width: 140px; border-bottom: 1px solid #000; margin: 4px auto 6px auto;"></div>
-          <div style="font-size: 11pt; font-style: italic;">Gia Lai, ngày ..... tháng ..... năm 202...</div>
+        <td style="width: 55%; text-align: center; vertical-align: top; padding: 0;">
+          <div style="font-size: 12pt; font-weight: bold; color: #000000; text-transform: uppercase;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+          <div style="font-size: 12pt; font-weight: bold; color: #000000;">Độc lập - Tự do - Hạnh phúc</div>
+          <div style="width: 150px; border-bottom: 1px solid #000000; margin: 3pt auto 5pt auto;"></div>
+          <div style="font-size: 12pt; font-style: italic; color: #000000;">Gia Lai, ngày ..... tháng ..... năm 202...</div>
         </td>
       </tr>
     </table>
 
-    <!-- Title -->
-    <div style="text-align: center; margin: 20px 0;">
-      <div style="font-size: 16pt; font-weight: bold; text-transform: uppercase;">BÁO CÁO</div>
-      <div style="font-size: 13pt; font-weight: bold; margin-top: 4px;">${titleText}</div>
+    <!-- Tiêu đề Báo cáo -->
+    <div style="text-align: center; margin: 12pt 0 16pt 0;">
+      <div class="report-title">BÁO CÁO</div>
+      <div class="report-subtitle">${titleText}</div>
     </div>
 
-    <!-- Section I -->
-    <div style="font-weight: bold; font-size: 13pt; margin-top: 15px; margin-bottom: 6px;">
-      I. KẾT QUẢ SOÁT PHIẾU CÔNG TÁC, LỆNH CÔNG TÁC
+    <!-- Section I: Biểu đồ dạng cột và Kết quả kiểm tra -->
+    <div class="section-title">
+      I. BIỂU ĐỒ TỶ LỆ VI PHẠM & KẾT QUẢ SOÁT PHIẾU CÔNG TÁC, LỆNH CÔNG TÁC
     </div>
 
-    <table>
+    <!-- 3 Cột Biểu đồ trực quan có màu sắc sinh động, không chứa lỗi tiêu biểu/nội dung lỗi -->
+    <table class="header-table" style="width: 100%; margin-bottom: 14pt;">
+      <tr>
+        <!-- Cột 1: Phiếu công tác (PCT) lỗi -->
+        <td style="width: 33.3%; padding: 4pt; vertical-align: top;">
+          <div class="chart-card" style="border: 1.5pt solid #2563eb;">
+            <div style="font-weight: bold; font-size: 11.5pt; color: #1e40af; text-align: center;">
+              PHIẾU CÔNG TÁC (PCT)
+            </div>
+            <!-- Thanh cột biểu đồ trực quan có màu -->
+            <div style="background-color: #dbeafe; height: 11px; width: 100%; border-radius: 5px; overflow: hidden; margin: 6pt 0 4pt 0;">
+              <div style="background-color: #2563eb; width: ${Math.max(Number(overview.pctErrorRate), 4)}%; height: 100%;"></div>
+            </div>
+            <div style="font-size: 19pt; font-weight: bold; color: #1d4ed8; text-align: center; margin: 2pt 0;">
+              ${overview.pctErrorRate}%
+            </div>
+            <div style="font-size: 10.5pt; text-align: center; color: #000000;">
+              <b>${overview.pctWithErrors}</b> / ${overview.totalPCT} phiếu có lỗi
+            </div>
+          </div>
+        </td>
+
+        <!-- Cột 2: Lệnh công tác (LCT) lỗi -->
+        <td style="width: 33.3%; padding: 4pt; vertical-align: top;">
+          <div class="chart-card" style="border: 1.5pt solid #059669;">
+            <div style="font-weight: bold; font-size: 11.5pt; color: #065f46; text-align: center;">
+              LỆNH CÔNG TÁC (LCT)
+            </div>
+            <!-- Thanh cột biểu đồ trực quan có màu -->
+            <div style="background-color: #d1fae5; height: 11px; width: 100%; border-radius: 5px; overflow: hidden; margin: 6pt 0 4pt 0;">
+              <div style="background-color: #059669; width: ${Math.max(Number(overview.lctErrorRate), 4)}%; height: 100%;"></div>
+            </div>
+            <div style="font-size: 19pt; font-weight: bold; color: #047857; text-align: center; margin: 2pt 0;">
+              ${overview.lctErrorRate}%
+            </div>
+            <div style="font-size: 10.5pt; text-align: center; color: #000000;">
+              <b>${overview.lctWithErrors}</b> / ${overview.totalLCT} lệnh có lỗi
+            </div>
+          </div>
+        </td>
+
+        <!-- Cột 3: Tổng Phiếu + Lệnh lỗi -->
+        <td style="width: 33.3%; padding: 4pt; vertical-align: top;">
+          <div class="chart-card" style="border: 1.5pt solid #e11d48;">
+            <div style="font-weight: bold; font-size: 11.5pt; color: #9f1239; text-align: center;">
+              TỔNG PHIẾU + LỆNH LỖI
+            </div>
+            <!-- Thanh cột biểu đồ trực quan có màu -->
+            <div style="background-color: #ffe4e6; height: 11px; width: 100%; border-radius: 5px; overflow: hidden; margin: 6pt 0 4pt 0;">
+              <div style="background-color: #e11d48; width: ${Math.max(Number(overview.errorRate), 4)}%; height: 100%;"></div>
+            </div>
+            <div style="font-size: 19pt; font-weight: bold; color: #be123c; text-align: center; margin: 2pt 0;">
+              ${overview.errorRate}%
+            </div>
+            <div style="font-size: 10.5pt; text-align: center; color: #000000;">
+              <b>${overview.documentsWithErrors}</b> / ${overview.totalDocuments} hồ sơ có lỗi
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Bảng tổng hợp số liệu hành chính chuẩn (Không tô màu nền, toàn bộ chữ màu đen, chia cột chuẩn) -->
+    <table class="data-table">
       <thead>
         <tr>
-          <th style="width: 40px;">STT</th>
-          <th>Chỉ số giám sát / Thống kê</th>
-          <th style="width: 90px;">Kết quả</th>
-          <th>Diễn giải phương pháp tính</th>
+          <th style="width: 8%;">STT</th>
+          <th style="width: 48%;">Chỉ số giám sát / Thống kê</th>
+          <th style="width: 18%;">Kết quả</th>
+          <th style="width: 26%;">Ghi chú</th>
         </tr>
       </thead>
       <tbody>
@@ -129,43 +254,43 @@ export function exportToWord({
           <td class="text-center">1</td>
           <td>Tổng số Phiếu công tác (PCT) đã kiểm tra</td>
           <td class="text-center bold">${overview.totalPCT}</td>
-          <td>Phiếu công tác thực tế tại các tổ máy & trạm</td>
+          <td>${notes[1] || '&nbsp;'}</td>
         </tr>
         <tr>
           <td class="text-center">2</td>
           <td>Tổng số Lệnh công tác (LCT) đã kiểm tra</td>
           <td class="text-center bold">${overview.totalLCT}</td>
-          <td>Lệnh công tác không áp dụng người cho phép</td>
+          <td>${notes[2] || '&nbsp;'}</td>
         </tr>
-        <tr style="background-color: #f8fafc; font-weight: bold;">
+        <tr>
           <td class="text-center">3</td>
-          <td>Tổng Phiếu và Lệnh công tác đã kiểm tra (Sau loại trùng)</td>
-          <td class="text-center">${overview.totalDocuments}</td>
-          <td>Dữ liệu chuẩn hóa duy nhất</td>
+          <td class="bold">Tổng Phiếu và Lệnh công tác đã kiểm tra (Sau loại trùng)</td>
+          <td class="text-center bold">${overview.totalDocuments}</td>
+          <td>${notes[3] || '&nbsp;'}</td>
         </tr>
         <tr>
           <td class="text-center">4</td>
           <td>Số Phiếu và Lệnh công tác có vi phạm</td>
-          <td class="text-center bold" style="color: #b91c1c;">${overview.documentsWithErrors}</td>
-          <td>Hợp lệ: ${overview.validDocuments}</td>
+          <td class="text-center bold">${overview.documentsWithErrors}</td>
+          <td>${notes[4] || '&nbsp;'}</td>
         </tr>
         <tr>
           <td class="text-center">5</td>
           <td>Tổng số lỗi phát hiện</td>
-          <td class="text-center bold" style="color: #b45309;">${overview.totalErrors}</td>
-          <td>CRITICAL: ${overview.criticalCount} | WARNING: ${overview.warningCount} | INFO: ${overview.infoCount}</td>
+          <td class="text-center bold">${overview.totalErrors}</td>
+          <td>${notes[5] || '&nbsp;'}</td>
         </tr>
-        <tr style="background-color: #fef2f2;">
+        <tr>
           <td class="text-center">6</td>
           <td class="bold">Tỷ lệ Phiếu và Lệnh công tác vi phạm (%)</td>
-          <td class="text-center bold" style="color: #b91c1c;">${overview.errorRate}%</td>
-          <td>(Số Phiếu/Lệnh vi phạm / Tổng số Phiếu/Lệnh) × 100</td>
+          <td class="text-center bold">${overview.errorRate}%</td>
+          <td>${notes[6] || '&nbsp;'}</td>
         </tr>
         <tr>
           <td class="text-center">7</td>
           <td>Số cá nhân liên đới phát hiện sai sót</td>
           <td class="text-center bold">${overview.totalPeopleWithErrors}</td>
-          <td>Người cấp phiếu, CHTT, Người cho phép</td>
+          <td>${notes[7] || '&nbsp;'}</td>
         </tr>
       </tbody>
     </table>
@@ -174,20 +299,19 @@ export function exportToWord({
       reportType === 'year'
         ? `
     <!-- Section II: 12 Months -->
-    <div style="font-weight: bold; font-size: 13pt; margin-top: 20px; margin-bottom: 6px;">
+    <div class="section-title">
       II. DIỄN BIẾN SỐ LIỆU QUA 12 THÁNG TRONG NĂM ${reportYear}
     </div>
-    <table>
+    <table class="data-table">
       <thead>
         <tr>
-          <th>Tháng</th>
-          <th>Tổng Phiếu/Lệnh</th>
-          <th>PCT</th>
-          <th>LCT</th>
-          <th>Vi phạm</th>
-          <th>Hợp lệ</th>
-          <th>Tổng lỗi</th>
-          <th>Tỷ lệ vi phạm</th>
+          <th style="width: 14%;">Tháng</th>
+          <th style="width: 14%;">Số PCT</th>
+          <th style="width: 14%;">Số LCT</th>
+          <th style="width: 15%;">Tổng Phiếu/Lệnh</th>
+          <th style="width: 14%;">Số vi phạm</th>
+          <th style="width: 14%;">Tổng số lỗi</th>
+          <th style="width: 15%;">Tỷ lệ vi phạm (%)</th>
         </tr>
       </thead>
       <tbody>
@@ -196,11 +320,10 @@ export function exportToWord({
             (m) => `
         <tr>
           <td class="text-center bold">${m.monthLabel}</td>
-          <td class="text-center">${m.totalDocuments}</td>
           <td class="text-center">${m.pctCount}</td>
           <td class="text-center">${m.lctCount}</td>
-          <td class="text-center bold" style="color: #b91c1c;">${m.errorDocuments}</td>
-          <td class="text-center" style="color: #047857;">${m.validDocuments}</td>
+          <td class="text-center bold">${m.totalDocuments}</td>
+          <td class="text-center bold">${m.errorDocuments}</td>
           <td class="text-center bold">${m.totalErrors}</td>
           <td class="text-center">${m.errorRate}%</td>
         </tr>
@@ -214,21 +337,21 @@ export function exportToWord({
     }
 
     <!-- Section: Workshop Breakdown -->
-    <div style="font-weight: bold; font-size: 13pt; margin-top: 20px; margin-bottom: 6px;">
+    <div class="section-title">
       ${reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP THEO PHÂN XƯỞNG (PXVH & PXSC)
     </div>
-    <div style="font-size: 11pt; font-style: italic; margin-bottom: 6px; color: #444;">
+    <div style="font-size: 11pt; font-style: italic; margin-bottom: 6pt; color: #000000;">
       (Quy định phân định: Người CHTT, Nhân viên ĐCT thuộc Phân xưởng Sửa chữa; Người cấp phiếu, Người cho phép thuộc Phân xưởng Vận hành)
     </div>
-    <table>
+    <table class="data-table">
       <thead>
         <tr>
-          <th>Đơn vị / Phân xưởng</th>
-          <th>Chức danh quy định</th>
-          <th style="width: 80px;">Số cá nhân</th>
-          <th style="width: 110px;">Phiếu/Lệnh vi phạm</th>
-          <th style="width: 80px;">Tổng lỗi</th>
-          <th style="width: 90px;">Tỷ trọng (%)</th>
+          <th style="width: 26%;">Đơn vị / Phân xưởng</th>
+          <th style="width: 34%;">Chức danh quy định</th>
+          <th style="width: 10%;">Số cá nhân</th>
+          <th style="width: 10%;">Phiếu/Lệnh vi phạm</th>
+          <th style="width: 10%;">Tổng lỗi</th>
+          <th style="width: 10%;">Tỷ trọng (%)</th>
         </tr>
       </thead>
       <tbody>
@@ -239,8 +362,8 @@ export function exportToWord({
           <td class="bold">${ws.workshopName} (${ws.shortName})</td>
           <td>${ws.roles.join(', ')}</td>
           <td class="text-center">${ws.peopleCount}</td>
-          <td class="text-center bold" style="color: #b91c1c;">${ws.violationDocuments}</td>
-          <td class="text-center bold" style="color: #b45309;">${ws.totalErrors}</td>
+          <td class="text-center bold">${ws.violationDocuments}</td>
+          <td class="text-center bold">${ws.totalErrors}</td>
           <td class="text-center bold">${ws.errorShare}%</td>
         </tr>
         `
@@ -249,54 +372,28 @@ export function exportToWord({
       </tbody>
     </table>
 
-    <!-- Section: Personal Analysis -->
-    <div style="font-weight: bold; font-size: 13pt; margin-top: 20px; margin-bottom: 6px;">
-      ${reportType === 'month' ? 'III.' : 'IV.'} TỔNG HỢP TRÁCH NHIỆM & CẢNH BÁO CÁ NHÂN
+    ${
+      evaluationNote && evaluationNote.trim()
+        ? `
+    <!-- Section: Evaluation & Recommendations -->
+    <div class="section-title">
+      ${reportType === 'month' ? 'III.' : 'IV.'} ĐÁNH GIÁ, KIẾN NGHỊ & GHI CHÚ BỔ SUNG
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 40px;">STT</th>
-          <th>Họ và tên cán bộ</th>
-          <th>Chức danh đảm nhiệm</th>
-          <th>Phiếu/Lệnh tham gia</th>
-          <th>Tổng số lỗi</th>
-          <th>Số tháng có lỗi</th>
-          <th>Ghi chú cảnh báo</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${personalStats
-          .slice(0, 15)
-          .map(
-            (p, idx) => `
-        <tr>
-          <td class="text-center">${idx + 1}</td>
-          <td class="bold">${p.name}</td>
-          <td>${p.roles.join(', ')}</td>
-          <td class="text-center">${p.documentsCount}</td>
-          <td class="text-center bold" style="color: #b91c1c;">${p.totalErrors}</td>
-          <td class="text-center">${p.monthsWithErrorsCount}</td>
-          <td class="text-center">${
-            p.hasMonthlyAlert || p.hasYearlyAlert
-              ? '<span style="color: #dc2626; font-weight: bold;">[!] Cảnh báo tần suất vi phạm</span>'
-              : 'Bình thường'
-          }</td>
-        </tr>
-        `
-          )
-          .join('')}
-      </tbody>
-    </table>
+    <div style="border: 1px solid #000000; padding: 8pt 10pt; font-size: 13pt; line-height: 1.35; margin-bottom: 12pt; background-color: #ffffff; color: #000000;">
+      ${evaluationNote.replace(/\n/g, '<br/>')}
+    </div>
+    `
+        : ''
+    }
 
     <!-- Signature -->
-    <table class="header-table" style="width: 100%; margin-top: 40px;">
+    <table class="header-table" style="width: 100%; margin-top: 24pt;">
       <tr>
         <td style="width: 50%;"></td>
         <td style="width: 50%; text-align: center;">
-          <div style="font-weight: bold; text-transform: uppercase;">NGƯỜI LẬP BÁO CÁO</div>
-          <div style="font-size: 10pt; font-style: italic; color: #555;">(Ký, ghi rõ họ tên)</div>
-          <div style="height: 70px;"></div>
+          <div style="font-weight: bold; text-transform: uppercase; color: #000000;">NGƯỜI LẬP BÁO CÁO</div>
+          <div style="font-size: 11pt; font-style: italic; color: #000000;">(Ký, ghi rõ họ tên)</div>
+          <div style="height: 60px;"></div>
         </td>
       </tr>
     </table>
@@ -309,21 +406,21 @@ export function exportToWord({
     type: 'application/msword;charset=utf-8',
   });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
+  const a = document.createElement('a');
+  a.href = url;
   const fileName =
     reportType === 'month'
-      ? `Bao_Cao_Hau_Kiem_PCT_LCT_Thang_${reportMonth}_${reportYear}.doc`
-      : `Bao_Cao_Hau_Kiem_PCT_LCT_Nam_${reportYear}.doc`;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+      ? `Bao_cao_hau_kiem_thang_${reportMonth < 10 ? '0' + reportMonth : reportMonth}_${reportYear}.doc`
+      : `Bao_cao_hau_kiem_nam_${reportYear}.doc`;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
 /**
- * Triggers clean browser print dialog with print styling for PDF generation
+ * Triggers standard browser print dialog for high-quality administrative PDF export
  */
 export function triggerPrintReport() {
   window.print();

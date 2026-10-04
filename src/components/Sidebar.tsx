@@ -17,7 +17,6 @@ export type ActiveTab =
   | 'dashboard'
   | 'heatmap'
   | 'personal'
-  | 'errors'
   | 'records'
   | 'reports'
   | 'settings';
@@ -64,12 +63,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Thống kê Cá nhân liên quan',
       desc: 'Cảnh báo và các tháng vi phạm',
       icon: Users,
-    },
-    {
-      id: 'errors' as ActiveTab,
-      label: 'Nội dung lỗi',
-      desc: 'CRITICAL, WARNING, INFO & Điều 278',
-      icon: AlertOctagon,
     },
     {
       id: 'records' as ActiveTab,

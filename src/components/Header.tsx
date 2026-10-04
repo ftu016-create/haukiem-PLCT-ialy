@@ -107,10 +107,6 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'Google Sheets đã kết nối'}
                 </span>
               </div>
-              <span className="text-slate-300">|</span>
-              <span>Gốc: <strong className="text-slate-800">{syncState.totalRawRows}</strong> dòng</span>
-              <span className="text-slate-300">|</span>
-              <span className="text-emerald-700 font-medium">Chuẩn: <strong className="text-emerald-800">{syncState.totalUniqueRows}</strong> hồ sơ</span>
               {syncState.totalDuplicatesRemoved > 0 && (
                 <>
                   <span className="text-slate-300">|</span>

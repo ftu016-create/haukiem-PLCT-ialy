@@ -280,17 +280,7 @@ export const DataTable: React.FC<DataTableProps> = ({ records, onSelectRecord })
                               key={eIdx}
                               className="text-[11px] truncate flex items-center gap-1 text-slate-700"
                             >
-                              <span
-                                className={`px-1 py-0.2 rounded text-[9px] font-bold shrink-0 ${
-                                  err.severity === 'CRITICAL'
-                                    ? 'bg-rose-600 text-white'
-                                    : err.severity === 'WARNING'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'bg-blue-600 text-white'
-                                }`}
-                              >
-                                {err.severity}
-                              </span>
+                              <span className="text-rose-500 font-bold text-xs shrink-0">•</span>
                               <span className="truncate">{err.message}</span>
                             </div>
                           ))}

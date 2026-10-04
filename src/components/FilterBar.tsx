@@ -43,7 +43,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.month !== 'all' ||
     filters.documentType !== 'all' ||
     filters.unit !== 'all' ||
-    filters.severity !== 'all' ||
     filters.statusFilter !== 'all' ||
     filters.searchQuery !== '';
 
@@ -52,7 +51,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.month !== 'all',
     filters.documentType !== 'all',
     filters.unit !== 'all',
-    filters.severity !== 'all',
     filters.statusFilter !== 'all',
     Boolean(filters.searchQuery),
   ].filter(Boolean).length;
@@ -121,8 +119,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
       </div>
 
-      {/* Grid of Structured Columns */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3">
+      {/* Grid of Structured Columns - 5 Cột chuẩn đối xứng */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-3">
         {/* 1. NĂM */}
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -217,30 +215,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </select>
         </div>
 
-        {/* 5. MỨC LỖI */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <AlertTriangle className="w-3 h-3 text-blue-600" />
-            <span>Mức lỗi</span>
-          </label>
-          <select
-            value={filters.severity}
-            onChange={(e) =>
-              onChangeFilters({
-                ...filters,
-                severity: e.target.value as 'all' | ErrorSeverity,
-              })
-            }
-            className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
-          >
-            <option value="all">Tất cả mức độ</option>
-            <option value="CRITICAL">🔴 CRITICAL (Nghiêm trọng)</option>
-            <option value="WARNING">🟠 WARNING (Cảnh báo)</option>
-            <option value="INFO">🔵 INFO (Thông tin)</option>
-          </select>
-        </div>
-
-        {/* 6. ĐƠN VỊ */}
+        {/* 5. ĐƠN VỊ - Đúng 5 mục chuẩn */}
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
             <Building2 className="w-3 h-3 text-blue-600" />
@@ -256,7 +231,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             }
             className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition cursor-pointer truncate"
           >
-            <option value="all">Tất cả đơn vị</option>
+            <option value="all">Tất cả</option>
             {unitsList.map((u) => (
               <option key={u} value={u}>
                 {u}

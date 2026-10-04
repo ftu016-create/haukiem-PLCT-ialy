@@ -101,34 +101,87 @@ export function parseCSVToRawRecords(csvText: string): RawSheetRecord[] {
   if (rows.length === 0) return [];
 
   // Check header or filter repeated headers
-  const dataRows: RawSheetRecord[] = [];
-  for (let idx = 0; idx < rows.length; idx++) {
-    const row = rows[idx];
-    if (row.length < 5) continue;
+  // Tự động nhận diện tiêu đề cột nếu có
+  let headerMap: { [key: string]: number } = {};
+  let startIndex = 0;
+  if (rows.length > 0) {
+    const firstRowLower = rows[0].map((c) => c.toLowerCase().trim());
+    const isHeader = firstRowLower.some(
+      (c) => c.includes('mã') || c.includes('công việc') || c.includes('ngày') || c.includes('kết quả')
+    );
+    if (isHeader) {
+      firstRowLower.forEach((colName, colIdx) => {
+        if (colName.includes('stt')) headerMap['stt'] = colIdx;
+        else if (colName.includes('mã') || colName.includes('code')) headerMap['code'] = colIdx;
+        else if (colName.includes('công việc') || colName.includes('tên cv')) headerMap['jobName'] = colIdx;
+        else if (colName.includes('người hậu kiểm') || colName.includes('người kiểm')) headerMap['inspectorName'] = colIdx;
+        else if (colName.includes('email')) headerMap['inspectorEmail'] = colIdx;
+        else if (colName.includes('đơn vị')) headerMap['unit'] = colIdx;
+        else if (colName.includes('cấp phiếu')) headerMap['issuer'] = colIdx;
+        else if (colName.includes('chtt') || colName.includes('chỉ huy')) headerMap['leader'] = colIdx;
+        else if (colName.includes('cho phép')) headerMap['approver'] = colIdx;
+        else if (
+          colName.includes('nhân viên') ||
+          colName.includes('nvdvct') ||
+          colName.includes('nvđvct') ||
+          colName.includes('nvđct') ||
+          colName.includes('đội công tác')
+        ) {
+          headerMap['workers'] = colIdx;
+        } else if (colName.includes('ra lệnh') || colName.includes('nrl')) {
+          headerMap['orderGiver'] = colIdx;
+        } else if (colName.includes('giám sát') || colName.includes('gsat')) {
+          headerMap['supervisor'] = colIdx;
+        } else if (colName.includes('kết quả')) headerMap['result'] = colIdx;
+        else if (colName.includes('điểm') || colName.includes('score')) headerMap['safetyScore'] = colIdx;
+        else if (colName.includes('số lỗi')) headerMap['errorCount'] = colIdx;
+        else if (colName.includes('danh sách lỗi') || colName.includes('nội dung lỗi')) headerMap['rawErrors'] = colIdx;
+        else if (colName.includes('ngày')) headerMap['auditDate'] = colIdx;
+      });
+      startIndex = 1;
+    }
+  }
 
-    // Check if this row is a header row (e.g. STT, Mã PCT...)
+  const getCol = (row: string[], key: string, fallbackIdx?: number): string => {
+    if (headerMap[key] !== undefined && row[headerMap[key]] !== undefined) {
+      return row[headerMap[key]];
+    }
+    if (fallbackIdx !== undefined && row[fallbackIdx] !== undefined) {
+      return row[fallbackIdx];
+    }
+    return '';
+  };
+
+  const dataRows: RawSheetRecord[] = [];
+  for (let idx = startIndex; idx < rows.length; idx++) {
+    const row = rows[idx];
+    if (row.length < 4) continue;
+
+    // Check if this row is a repeated header row (e.g. STT, Mã PCT...)
     const firstCol = (row[0] || '').trim().toUpperCase();
     const secondCol = (row[1] || '').trim().toUpperCase();
     if (firstCol === 'STT' && (secondCol.includes('MÃ') || secondCol.includes('MA') || secondCol.includes('PCT'))) {
-      continue; // Skip header
+      continue;
     }
 
-    // Map 14 columns
     const record: RawSheetRecord = {
-      stt: row[0] || '',
-      code: row[1] || '',
-      jobName: row[2] || '',
-      inspectorName: row[3] || '',
-      inspectorEmail: row[4] || '',
-      unit: row[5] || '',
-      issuer: row[6] || '',
-      leader: row[7] || '',
-      approver: row[8] || '',
-      result: row[9] || '',
-      safetyScore: row[10] || '',
-      errorCount: row[11] || '',
-      rawErrors: row[12] || '',
-      auditDate: row[13] || '',
+      stt: getCol(row, 'stt', 0),
+      code: getCol(row, 'code', 1),
+      jobName: getCol(row, 'jobName', 2),
+      inspectorName: getCol(row, 'inspectorName', 3),
+      inspectorEmail: getCol(row, 'inspectorEmail', 4),
+      unit: getCol(row, 'unit', 5),
+      issuer: getCol(row, 'issuer', 6),
+      leader: getCol(row, 'leader', 7),
+      approver: getCol(row, 'approver', 8),
+      workers: getCol(row, 'workers', 14),
+      orderGiver: getCol(row, 'orderGiver', 15),
+      supervisor: getCol(row, 'supervisor', 16),
+      result: getCol(row, 'result', 9),
+      safetyScore: getCol(row, 'safetyScore', 10),
+      errorCount: getCol(row, 'errorCount', 11),
+      rawErrors: getCol(row, 'rawErrors', 12),
+      auditDate: getCol(row, 'auditDate', 13),
     };
 
     // Filter out completely empty rows

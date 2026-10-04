@@ -32,6 +32,10 @@ export interface RawSheetRecord {
   issuer: string;
   leader: string;
   approver: string;
+  workers?: string; // Nhân viên đơn vị công tác (NVĐVCT / NVĐCT)
+  orderGiver?: string; // Người ra lệnh (NRL)
+  supervisor?: string; // Người giám sát an toàn điện / GSAT
+  extraPersonnel?: string; // Các chức danh khác trong hồ sơ
   result: string;
   safetyScore: string;
   errorCount: string;
@@ -52,6 +56,11 @@ export interface NormalizedRecord {
   issuer: string;
   leader: string;
   approver: string;
+  workers?: string;
+  orderGiver?: string;
+  supervisor?: string;
+  extraPersonnel?: string;
+  allPersonnel?: string[];
   result: 'Có sai sót' | 'Hợp lệ' | 'Chưa xác định';
   safetyScore: number;
   errorCount: number;
@@ -121,11 +130,11 @@ export interface StatisticsOverview {
   infoCount: number;
 }
 
-export type Workshop = 'Phân xưởng Sửa chữa' | 'Phân xưởng Vận hành' | 'Liên phân xưởng';
+export type Workshop = 'Phân xưởng Sửa chữa' | 'Phân xưởng Vận hành' | 'Đơn vị ngoài' | 'Liên phân xưởng';
 
 export interface WorkshopStat {
-  workshopName: 'Phân xưởng Vận hành' | 'Phân xưởng Sửa chữa';
-  shortName: 'PXVH' | 'PXSC';
+  workshopName: 'Phân xưởng Vận hành' | 'Phân xưởng Sửa chữa' | 'Đơn vị ngoài';
+  shortName: 'PXVH' | 'PXSC' | 'DVN';
   roles: string[];
   totalErrors: number;
   violationDocuments: number;

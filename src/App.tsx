@@ -130,8 +130,8 @@ export default function App() {
   }, [filteredRecords]);
 
   const personalStats = useMemo(() => {
-    return calculatePersonalAnalysis(filteredRecords, filters.month);
-  }, [filteredRecords, filters.month]);
+    return calculatePersonalAnalysis(filteredRecords, filters.month, filters.unit);
+  }, [filteredRecords, filters.month, filters.unit]);
 
   const roleStats = useMemo(() => {
     return calculateRoleAnalysis(filteredRecords);
@@ -148,12 +148,16 @@ export default function App() {
     return years.length > 0 ? years : [2026];
   }, [normalizedRecords]);
 
+  // Danh sách đúng 5 mục chuẩn theo yêu cầu:
+  // Tất cả, Công ty Thủy điện Ialy, Phân xưởng Vận hành, Phân xưởng Sửa chữa, Đơn vị ngoài
   const unitsList = useMemo(() => {
-    const rawUnits = Array.from(new Set(normalizedRecords.map((r) => r.unit).filter(Boolean)));
-    const fixedUnits = ['Phân xưởng Vận hành', 'Phân xưởng Sửa chữa'];
-    const otherUnits = rawUnits.filter((u) => !fixedUnits.includes(u)).sort();
-    return [...fixedUnits, ...otherUnits];
-  }, [normalizedRecords]);
+    return [
+      'Công ty Thủy điện Ialy',
+      'Phân xưởng Vận hành',
+      'Phân xưởng Sửa chữa',
+      'Đơn vị ngoài',
+    ];
+  }, []);
 
   // Google Sheets Live Sync Handler
   const handleSync = useCallback(async () => {
@@ -263,6 +267,15 @@ export default function App() {
 
   // Export handlers
   const handleExportWord = () => {
+    let savedNotes: { [key: number]: string } | undefined = undefined;
+    let savedEval: string | undefined = undefined;
+    try {
+      const raw = localStorage.getItem('ialy_report_custom_notes_v3');
+      if (raw) savedNotes = JSON.parse(raw);
+      const evalRaw = localStorage.getItem('ialy_report_evaluation_note');
+      if (evalRaw) savedEval = evalRaw;
+    } catch (e) {}
+
     exportToWord({
       overview,
       records: filteredRecords,
@@ -271,6 +284,8 @@ export default function App() {
       reportType: filters.month === 'all' ? 'year' : 'month',
       reportMonth: filters.month === 'all' ? 9 : filters.month,
       reportYear: filters.year === 'all' ? 2026 : filters.year,
+      customNotes: savedNotes,
+      evaluationNote: savedEval,
     });
   };
 
@@ -304,7 +319,6 @@ export default function App() {
             {activeTab === 'dashboard' && 'Tổng quan'}
             {activeTab === 'heatmap' && 'Thống kê năm'}
             {activeTab === 'personal' && 'Thống kê Cá nhân liên quan'}
-            {activeTab === 'errors' && 'Nội dung lỗi'}
             {activeTab === 'records' && 'Danh sách & Tra cứu'}
             {activeTab === 'reports' && 'Báo cáo & Xuất file'}
             {activeTab === 'settings' && 'Cấu hình'}
@@ -375,8 +389,8 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               <KpiCards overview={overview} />
-              {/* 3 Biểu đồ tròn theo yêu cầu vị trí 1, 2, 3 */}
-              <ErrorProportionCharts overview={overview} />
+              {/* 3 Biểu đồ tròn theo yêu cầu vị trí 1, 2, 3 (kèm danh sách lỗi và xem chi tiết khi nhấp) */}
+              <ErrorProportionCharts overview={overview} records={filteredRecords} />
               <MonthlyCharts
                 monthlyData={monthlyStats}
                 targetYear={filters.year === 'all' ? 2026 : filters.year}
@@ -413,9 +427,6 @@ export default function App() {
               selectedMonth={filters.month}
             />
           )}
-
-          {/* TAB: ERROR ANALYSIS */}
-          {activeTab === 'errors' && <ErrorAnalysis records={filteredRecords} />}
 
           {/* TAB: RECORDS & SEARCH */}
           {activeTab === 'records' && <DataTable records={filteredRecords} />}

@@ -9,6 +9,7 @@ import {
   Workshop,
   WorkshopStat,
 } from '../types';
+import { isPXVHMember, isExternalUnit } from '../data/personnelData';
 
 /**
  * Filter dataset based on current user selections
@@ -30,21 +31,27 @@ export function applyFilters(records: NormalizedRecord[], filters: FilterState):
       return false;
     }
 
-    // Unit / Workshop filter (Hỗ trợ lọc theo Phân xưởng Vận hành & Phân xưởng Sửa chữa)
+    // Unit / Workshop filter (Rút gọn đúng 5 mục chuẩn: Tất cả, Công ty Thủy điện Ialy, Phân xưởng Vận hành, Phân xưởng Sửa chữa, Đơn vị ngoài)
     if (filters.unit && filters.unit !== 'all') {
-      const u = filters.unit.toLowerCase();
-      if (u.includes('sửa chữa') || u === 'pxsc') {
-        const matchesUnit = rec.unit.toLowerCase().includes('sửa chữa');
-        const hasLeader = rec.leader && !rec.leader.includes('Chưa rõ');
-        if (!matchesUnit && !hasLeader) return false;
-      } else if (u.includes('vận hành') || u === 'pxvh') {
+      const u = filters.unit.trim();
+      const isExt = isExternalUnit(rec.unit) || isExternalUnit(rec.jobName);
+
+      if (u === 'Đơn vị ngoài') {
+        if (!isExt) return false;
+      } else if (u === 'Công ty Thủy điện Ialy') {
+        if (isExt) return false;
+      } else if (u === 'Phân xưởng Vận hành') {
+        if (isExt) return false;
         const matchesUnit = rec.unit.toLowerCase().includes('vận hành');
-        const hasIssuerOrApprover =
-          (rec.issuer && !rec.issuer.includes('Chưa rõ')) ||
-          (rec.approver && !rec.approver.includes('Chưa rõ') && !rec.approver.includes('Không áp dụng'));
-        if (!matchesUnit && !hasIssuerOrApprover) return false;
+        const hasVHMember = isPXVHMember(rec.issuer) || isPXVHMember(rec.approver);
+        if (!matchesUnit && !hasVHMember) return false;
+      } else if (u === 'Phân xưởng Sửa chữa') {
+        if (isExt) return false;
+        const matchesUnit = rec.unit.toLowerCase().includes('sửa chữa');
+        const hasSCLeader = rec.leader && !rec.leader.includes('Chưa rõ') && !isPXVHMember(rec.leader);
+        if (!matchesUnit && !hasSCLeader) return false;
       } else {
-        if (!rec.unit.toLowerCase().includes(filters.unit.toLowerCase())) {
+        if (!rec.unit.toLowerCase().includes(u.toLowerCase())) {
           return false;
         }
       }
@@ -58,11 +65,7 @@ export function applyFilters(records: NormalizedRecord[], filters: FilterState):
       return false;
     }
 
-    // Severity filter
-    if (filters.severity !== 'all') {
-      const hasSev = rec.parsedErrors.some((e) => e.severity === filters.severity);
-      if (!hasSev) return false;
-    }
+    // Severity filter đã được gỡ bỏ theo yêu cầu của người dùng
 
     // Search query (Mã, Người, Đơn vị, Nội dung lỗi, Tên công việc)
     if (filters.searchQuery && filters.searchQuery.trim()) {
@@ -114,10 +117,22 @@ export function calculateOverview(records: NormalizedRecord[]): StatisticsOvervi
       if (isPCT) pctWithErrors++;
       if (isLCT) lctWithErrors++;
 
-      // Track responsible personnel for documents with errors
-      [rec.issuer, rec.leader, rec.approver].forEach((p) => {
-        if (p && !p.includes('Chưa rõ') && !p.includes('Không áp dụng')) {
-          peopleWithErrorsSet.add(p.trim());
+      // Thống kê toàn bộ chức danh liên đới (Người cấp phiếu, CHTT, Người cho phép, NVĐVCT, Người ra lệnh, Giám sát...)
+      [rec.issuer, rec.leader, rec.approver, rec.workers, rec.orderGiver, rec.supervisor, rec.extraPersonnel].forEach((p) => {
+        if (p && typeof p === 'string') {
+          // Hỗ trợ trường hợp ô chứa nhiều nhân sự ngăn cách bởi dấu phẩy, chấm phẩy hoặc xuống dòng
+          const names = p.split(/[,;\n\r]| và /);
+          names.forEach((n) => {
+            const trimmed = n.trim();
+            if (
+              trimmed &&
+              trimmed.length >= 2 &&
+              !trimmed.toLowerCase().includes('chưa rõ') &&
+              !trimmed.toLowerCase().includes('không áp dụng')
+            ) {
+              peopleWithErrorsSet.add(trimmed);
+            }
+          });
         }
       });
     }
@@ -166,15 +181,17 @@ export function calculateOverview(records: NormalizedRecord[]): StatisticsOvervi
   };
 }
 
+export type TrackedRoleKey = 'issuer' | 'leader' | 'approver' | 'workers' | 'orderGiver' | 'supervisor';
+
 /**
  * Phân tích danh sách lỗi để xác định chính xác chức danh nào vi phạm quy trình.
- * Roles: 'issuer' (Người cấp phiếu), 'leader' (Người CHTT), 'approver' (Người cho phép).
+ * Hỗ trợ mọi chức danh: Cấp phiếu, CHTT, Cho phép, NVĐVCT, Người ra lệnh, Giám sát...
  */
 export function getResponsibleRolesFromErrors(
   parsedErrors: NormalizedRecord['parsedErrors'],
   rawErrors: string
-): Set<'issuer' | 'leader' | 'approver'> {
-  const result = new Set<'issuer' | 'leader' | 'approver'>();
+): Set<TrackedRoleKey> {
+  const result = new Set<TrackedRoleKey>();
 
   if (
     parsedErrors.length === 0 &&
@@ -194,8 +211,6 @@ export function getResponsibleRolesFromErrors(
       text.includes('chtt') ||
       text.includes('chỉ huy trực tiếp') ||
       text.includes('chi huy truc tiep') ||
-      text.includes('đơn vị công tác') ||
-      text.includes('nhân viên') ||
       text.includes('vị trí làm việc') ||
       text.includes('tiếp đất di động') ||
       text.includes('điều 30 quy trình 278') || // Hoàn thành công việc của CHTT
@@ -206,7 +221,32 @@ export function getResponsibleRolesFromErrors(
       matched = true;
     }
 
-    // 2. Kiểm tra Người Cho Phép
+    // 2. Kiểm tra Nhân viên Đơn vị công tác (NVĐVCT / NVĐCT)
+    if (
+      text.includes('nhân viên') ||
+      text.includes('nvdvct') ||
+      text.includes('nvđvct') ||
+      text.includes('nvđct') ||
+      text.includes('đơn vị công tác') ||
+      text.includes('bậc an toàn của nhân viên')
+    ) {
+      result.add('workers');
+      result.add('leader');
+      matched = true;
+    }
+
+    // 3. Kiểm tra Người Ra Lệnh (NRL) trong LCT
+    if (
+      text.includes('ra lệnh') ||
+      text.includes('nrl') ||
+      text.includes('người ra lệnh') ||
+      text.includes('lệnh công tác')
+    ) {
+      result.add('orderGiver');
+      matched = true;
+    }
+
+    // 4. Kiểm tra Người Cho Phép
     if (
       text.includes('người cho phép') ||
       text.includes('nguoi cho phep') ||
@@ -221,7 +261,7 @@ export function getResponsibleRolesFromErrors(
       matched = true;
     }
 
-    // 3. Kiểm tra Người Cấp Phiếu
+    // 5. Kiểm tra Người Cấp Phiếu
     if (
       text.includes('người cấp phiếu') ||
       text.includes('nguoi cap phieu') ||
@@ -232,7 +272,13 @@ export function getResponsibleRolesFromErrors(
       matched = true;
     }
 
-    // 4. Các lỗi nghịch lý thời gian hoặc quy trình liên đới 2 bên
+    // 6. Kiểm tra Người Giám Sát an toàn
+    if (text.includes('giám sát') || text.includes('gsat')) {
+      result.add('supervisor');
+      matched = true;
+    }
+
+    // 7. Các lỗi nghịch lý thời gian hoặc quy trình liên đới 2 bên
     if (
       text.includes('nghịch lý thời gian') ||
       (text.includes('cho phép ký trước') && text.includes('cấp phiếu'))
@@ -251,17 +297,13 @@ export function getResponsibleRolesFromErrors(
       matched = true;
     }
 
-    // 5. Nếu lỗi chung về chức danh / bậc an toàn hoặc undefined
+    // 8. Nếu lỗi chung về chức danh / bậc an toàn hoặc chung
     if (!matched) {
-      if (text.includes('bậc an toàn điện của các chức danh')) {
-        result.add('issuer');
-        result.add('leader');
-        result.add('approver');
-      } else {
-        result.add('leader');
-        result.add('approver');
-        result.add('issuer');
-      }
+      result.add('leader');
+      result.add('approver');
+      result.add('issuer');
+      result.add('workers');
+      result.add('orderGiver');
     }
   });
 
@@ -275,12 +317,14 @@ export function getResponsibleRolesFromErrors(
  */
 export function calculatePersonalAnalysis(
   records: NormalizedRecord[],
-  selectedMonth: number | 'all' = 'all'
+  selectedMonth: number | 'all' = 'all',
+  unitFilter: string = 'all'
 ): PersonStat[] {
   const map = new Map<
     string,
     {
       roles: Set<string>;
+      units: Set<string>;
       totalErrors: number;
       docsCount: number;
       errorDocsCount: number; // Số phiếu/lệnh vi phạm
@@ -293,23 +337,37 @@ export function calculatePersonalAnalysis(
 
   // Khởi tạo và ghi nhận hồ sơ cho từng nhân sự
   records.forEach((rec) => {
-    const rolesInDoc: { roleKey: 'issuer' | 'leader' | 'approver'; person: string; roleLabel: string }[] = [];
+    const rolesInDoc: { roleKey: TrackedRoleKey; person: string; roleLabel: string }[] = [];
 
-    if (rec.issuer && !rec.issuer.includes('Chưa rõ')) {
-      rolesInDoc.push({ roleKey: 'issuer', person: rec.issuer.trim(), roleLabel: 'Người cấp phiếu' });
-    }
-    if (rec.leader && !rec.leader.includes('Chưa rõ')) {
-      rolesInDoc.push({ roleKey: 'leader', person: rec.leader.trim(), roleLabel: 'Người CHTT' });
-    }
-    if (rec.approver && !rec.approver.includes('Chưa rõ') && !rec.approver.includes('Không áp dụng')) {
-      rolesInDoc.push({ roleKey: 'approver', person: rec.approver.trim(), roleLabel: 'Người cho phép' });
-    }
+    const addPersonRole = (rawName: string | undefined, roleKey: TrackedRoleKey, roleLabel: string) => {
+      if (!rawName || typeof rawName !== 'string') return;
+      const names = rawName.split(/[,;\n\r]| và /);
+      names.forEach((n) => {
+        const trimmed = n.trim();
+        if (
+          trimmed &&
+          trimmed.length >= 2 &&
+          !trimmed.toLowerCase().includes('chưa rõ') &&
+          !trimmed.toLowerCase().includes('không áp dụng')
+        ) {
+          rolesInDoc.push({ roleKey, person: trimmed, roleLabel });
+        }
+      });
+    };
+
+    addPersonRole(rec.issuer, 'issuer', 'Người cấp phiếu');
+    addPersonRole(rec.leader, 'leader', 'Người CHTT');
+    addPersonRole(rec.approver, 'approver', 'Người cho phép');
+    addPersonRole(rec.workers, 'workers', 'Nhân viên ĐVCT');
+    addPersonRole(rec.orderGiver, 'orderGiver', 'Người ra lệnh');
+    addPersonRole(rec.supervisor, 'supervisor', 'Người giám sát AT');
 
     // Đăng ký nhân sự tham gia hồ sơ
     rolesInDoc.forEach(({ person, roleLabel }) => {
       if (!map.has(person)) {
         map.set(person, {
           roles: new Set<string>(),
+          units: new Set<string>(),
           totalErrors: 0,
           docsCount: 0,
           errorDocsCount: 0,
@@ -321,6 +379,7 @@ export function calculatePersonalAnalysis(
       }
       const pData = map.get(person)!;
       pData.roles.add(roleLabel);
+      if (rec.unit) pData.units.add(rec.unit);
       pData.docsCount++;
     });
 
@@ -365,32 +424,19 @@ export function calculatePersonalAnalysis(
     // 2. Trong năm: Có phiếu/lệnh vi phạm ở >= 2 tháng khác nhau trong năm
     const hasYearlyAlert = monthsWithErrorsCount >= 2;
 
-    // Phân loại Phân xưởng theo quy tắc:
-    // CHTT, Chỉ huy trực tiếp, Nhân viên ĐCT -> Phân xưởng Sửa chữa.
-    // Còn lại (Cấp phiếu, Cho phép, Trực ban, Trưởng ca...) -> Phân xưởng Vận hành.
+    // Phân loại Phân xưởng theo căn cứ chuẩn:
+    // 1. Nếu có tên trong danh sách 69 nhân sự PXVH -> Phân xưởng Vận hành
+    // 2. Nếu đơn vị là nhà thầu/đơn vị ngoài -> Đơn vị ngoài
+    // 3. Còn lại (Người CHTT, NVĐCT...) -> Phân xưởng Sửa chữa
     const rolesArr = Array.from(data.roles);
-    let hasSC = false;
-    let hasVH = false;
-    rolesArr.forEach((r) => {
-      const lower = r.toLowerCase();
-      if (
-        lower.includes('chtt') ||
-        lower.includes('chỉ huy') ||
-        lower.includes('chi huy') ||
-        lower.includes('đct') ||
-        lower.includes('đội công tác') ||
-        lower.includes('doi cong tac')
-      ) {
-        hasSC = true;
-      } else {
-        hasVH = true;
-      }
-    });
+    let workshop: Workshop = 'Phân xưởng Sửa chữa';
+    const isExt = isExternalUnit(name) || Array.from(data.units).some((u) => isExternalUnit(u));
 
-    let workshop: Workshop = 'Phân xưởng Vận hành';
-    if (hasSC && hasVH) {
-      workshop = 'Liên phân xưởng';
-    } else if (hasSC) {
+    if (isPXVHMember(name)) {
+      workshop = 'Phân xưởng Vận hành';
+    } else if (isExt) {
+      workshop = 'Đơn vị ngoài';
+    } else {
       workshop = 'Phân xưởng Sửa chữa';
     }
 
@@ -411,8 +457,22 @@ export function calculatePersonalAnalysis(
     });
   });
 
+  // Áp dụng bộ lọc đơn vị nếu có
+  let filtered = result;
+  if (unitFilter && unitFilter !== 'all') {
+    if (unitFilter === 'Phân xưởng Vận hành') {
+      filtered = result.filter((p) => p.workshop === 'Phân xưởng Vận hành');
+    } else if (unitFilter === 'Phân xưởng Sửa chữa') {
+      filtered = result.filter((p) => p.workshop === 'Phân xưởng Sửa chữa');
+    } else if (unitFilter === 'Đơn vị ngoài') {
+      filtered = result.filter((p) => p.workshop === 'Đơn vị ngoài');
+    } else if (unitFilter === 'Công ty Thủy điện Ialy') {
+      filtered = result.filter((p) => p.workshop !== 'Đơn vị ngoài');
+    }
+  }
+
   // Sắp xếp theo số phiếu/lệnh vi phạm giảm dần, sau đó đến số hồ sơ tham gia
-  return result.sort(
+  return filtered.sort(
     (a, b) => b.errorDocumentsCount - a.errorDocumentsCount || b.documentsCount - a.documentsCount
   );
 }
@@ -425,25 +485,40 @@ export function calculateRoleAnalysis(records: NormalizedRecord[]): RoleStat[] {
     { key: 'issuer', label: 'Người cấp phiếu' },
     { key: 'leader', label: 'Người CHTT' },
     { key: 'approver', label: 'Người cho phép' },
+    { key: 'workers', label: 'Nhân viên ĐVCT' },
+    { key: 'orderGiver', label: 'Người ra lệnh' },
+    { key: 'supervisor', label: 'Người giám sát AT' },
   ];
 
-  return roles.map(({ key, label }) => {
+  const results: RoleStat[] = [];
+
+  roles.forEach(({ key, label }) => {
     const personMap = new Map<string, { errorCount: number; docCount: number }>();
     let docCount = 0;
     let errorDocCount = 0;
     let totalErrors = 0;
 
     records.forEach((rec) => {
-      let personName = '';
-      if (key === 'issuer') personName = rec.issuer;
-      else if (key === 'leader') personName = rec.leader;
-      else if (key === 'approver') personName = rec.approver;
+      let rawNames: string[] = [];
+      if (key === 'issuer') rawNames = rec.issuer ? [rec.issuer] : [];
+      else if (key === 'leader') rawNames = rec.leader ? [rec.leader] : [];
+      else if (key === 'approver') rawNames = rec.approver ? [rec.approver] : [];
+      else if (key === 'workers') rawNames = rec.workers ? rec.workers.split(/[,;\n\r]| và /) : [];
+      else if (key === 'orderGiver') rawNames = rec.orderGiver ? [rec.orderGiver] : [];
+      else if (key === 'supervisor') rawNames = rec.supervisor ? [rec.supervisor] : [];
 
-      if (!personName || personName.includes('Chưa rõ') || personName.includes('Không áp dụng')) {
-        return;
-      }
+      const validNames = rawNames
+        .map((n) => n.trim())
+        .filter(
+          (n) =>
+            n &&
+            n.length >= 2 &&
+            !n.toLowerCase().includes('chưa rõ') &&
+            !n.toLowerCase().includes('không áp dụng')
+        );
 
-      personName = personName.trim();
+      if (validNames.length === 0) return;
+
       docCount++;
       const hasErrors = rec.result === 'Có sai sót' || rec.errorCount > 0;
       if (hasErrors) {
@@ -451,34 +526,39 @@ export function calculateRoleAnalysis(records: NormalizedRecord[]): RoleStat[] {
         totalErrors += rec.errorCount;
       }
 
-      if (!personMap.has(personName)) {
-        personMap.set(personName, { errorCount: 0, docCount: 0 });
-      }
-      const entry = personMap.get(personName)!;
-      entry.docCount++;
-      if (hasErrors) {
-        entry.errorCount += rec.errorCount;
-      }
+      validNames.forEach((personName) => {
+        if (!personMap.has(personName)) {
+          personMap.set(personName, { errorCount: 0, docCount: 0 });
+        }
+        const entry = personMap.get(personName)!;
+        entry.docCount++;
+        if (hasErrors) {
+          entry.errorCount += rec.errorCount;
+        }
+      });
     });
 
-    const errorRate = docCount > 0 ? (errorDocCount / docCount) * 100 : 0;
-    const errorDensity = docCount > 0 ? (totalErrors / docCount) * 100 : 0;
+    if (docCount > 0) {
+      const errorRate = docCount > 0 ? (errorDocCount / docCount) * 100 : 0;
+      const errorDensity = docCount > 0 ? (totalErrors / docCount) * 100 : 0;
+      const persons = Array.from(personMap.entries())
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.errorCount - a.errorCount);
 
-    const persons = Array.from(personMap.entries())
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.errorCount - a.errorCount);
-
-    return {
-      roleName: label,
-      personCount: personMap.size,
-      documentCount: docCount,
-      errorDocumentCount: errorDocCount,
-      totalErrors,
-      errorRate: Math.round(errorRate * 10) / 10,
-      errorDensity: Math.round(errorDensity * 10) / 10,
-      persons,
-    };
+      results.push({
+        roleName: label,
+        personCount: personMap.size,
+        documentCount: docCount,
+        errorDocumentCount: errorDocCount,
+        totalErrors,
+        errorRate: Math.round(errorRate * 10) / 10,
+        errorDensity: Math.round(errorDensity * 10) / 10,
+        persons,
+      });
+    }
   });
+
+  return results;
 }
 
 /**

@@ -112,13 +112,41 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
         </div>
       </div>
 
-      {/* Secondary Row: Clean 4-Column Layout */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Tỷ lệ Phiếu và Lệnh vi phạm (%) */}
-        <div className="bg-gradient-to-br from-rose-50/60 to-white rounded-2xl border border-rose-200/80 p-4 shadow-xs">
+      {/* Secondary Row: Tỷ lệ vi phạm theo từng loại (PCT, LCT, Tổng) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* 1. Tỷ lệ Phiếu công tác (PCT) vi phạm (%) */}
+        <div className="bg-gradient-to-br from-blue-50/70 to-white rounded-2xl border border-blue-200/80 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-blue-800 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Tỷ lệ Phiếu công tác (PCT) vi phạm</span>
+            <Percent className="w-4 h-4 text-blue-600" />
+          </div>
+          <div className="text-2xl font-black text-blue-700 tracking-tight">
+            {overview.pctErrorRate}%
+          </div>
+          <p className="text-[11px] text-blue-700/80 mt-1">
+            {overview.pctWithErrors} trên tổng {overview.totalPCT} Phiếu công tác
+          </p>
+        </div>
+
+        {/* 2. Tỷ lệ Lệnh công tác (LCT) vi phạm (%) */}
+        <div className="bg-gradient-to-br from-emerald-50/70 to-white rounded-2xl border border-emerald-200/80 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-emerald-800 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Tỷ lệ Lệnh công tác (LCT) vi phạm</span>
+            <Percent className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="text-2xl font-black text-emerald-700 tracking-tight">
+            {overview.lctErrorRate}%
+          </div>
+          <p className="text-[11px] text-emerald-700/80 mt-1">
+            {overview.lctWithErrors} trên tổng {overview.totalLCT} Lệnh công tác
+          </p>
+        </div>
+
+        {/* 3. Tỷ lệ Tổng Phiếu và Lệnh vi phạm (%) */}
+        <div className="bg-gradient-to-br from-rose-50/70 to-white rounded-2xl border border-rose-200/80 p-4 shadow-xs">
           <div className="flex items-center justify-between text-rose-800 mb-1">
             <div className="flex items-center gap-1">
-              <span className="text-xs font-bold uppercase tracking-wider">Tỷ lệ Phiếu và Lệnh vi phạm</span>
+              <span className="text-xs font-bold uppercase tracking-wider">Tổng Phiếu & Lệnh vi phạm</span>
               <span title="Công thức: (Phiếu/Lệnh có lỗi / Tổng Phiếu/Lệnh) * 100" className="cursor-help">
                 <HelpCircle className="w-3.5 h-3.5 text-rose-400" />
               </span>
@@ -131,57 +159,6 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
           <p className="text-[11px] text-rose-700/80 mt-1">
             {overview.documentsWithErrors} trên tổng {overview.totalDocuments} Phiếu và Lệnh
           </p>
-        </div>
-
-        {/* Lỗi CRITICAL */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-rose-600 animate-pulse" />
-              Lỗi CRITICAL
-            </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-              Nghiêm trọng
-            </span>
-          </div>
-          <div className="text-2xl font-black text-rose-600 tracking-tight">
-            {overview.criticalCount}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Vi phạm quy trình bắt buộc</p>
-        </div>
-
-        {/* Lỗi WARNING */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Lỗi WARNING
-            </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-              Cảnh báo
-            </span>
-          </div>
-          <div className="text-2xl font-black text-amber-600 tracking-tight">
-            {overview.warningCount}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Thiếu sót thủ tục, ghi chép</p>
-        </div>
-
-        {/* Lỗi INFO */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-blue-500" />
-              Lỗi INFO
-            </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-              Nhắc nhở
-            </span>
-          </div>
-          <div className="text-2xl font-black text-blue-600 tracking-tight">
-            {overview.infoCount}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Lỗi chính tả, định dạng ghi chú</p>
         </div>
       </div>
     </div>
