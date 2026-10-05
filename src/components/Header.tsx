@@ -20,8 +20,6 @@ interface HeaderProps {
   onOpenSheetsModal: () => void;
   role: UserRole;
   onChangeRole: (newRole: UserRole) => void;
-  onExportWord: () => void;
-  onExportPDF: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,8 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSheetsModal,
   role,
   onChangeRole,
-  onExportWord,
-  onExportPDF,
 }) => {
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -145,26 +141,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Database className="w-3.5 h-3.5 text-slate-600" />
                 <span className="hidden md:inline">Nguồn dữ liệu</span>
-              </button>
-
-              {/* Export Word */}
-              <button
-                onClick={onExportWord}
-                title="Xuất báo cáo sang file Word (.doc)"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                <span className="hidden lg:inline">Xuất Word</span>
-              </button>
-
-              {/* Export PDF / Print */}
-              <button
-                onClick={onExportPDF}
-                title="In hoặc Lưu báo cáo dưới dạng PDF"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-600" />
-                <span className="hidden lg:inline">In / PDF</span>
               </button>
 
               {/* Role Toggle */}

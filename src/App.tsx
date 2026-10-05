@@ -276,6 +276,10 @@ export default function App() {
       if (evalRaw) savedEval = evalRaw;
     } catch (e) {}
 
+    const defaultEval =
+      'Qua công tác hậu kiểm, các đơn vị và cá nhân cơ bản đã chấp hành tốt quy trình an toàn điện. Đề nghị các cá nhân và đơn vị tiếp tục chấn chỉnh các thiếu sót nêu trên, đặc biệt là việc ghi chép đầy đủ nội dung, thời gian và biện pháp an toàn trước khi cho phép vào làm việc.';
+    const effectiveEval = savedEval !== undefined && savedEval !== null ? savedEval : defaultEval;
+
     exportToWord({
       overview,
       records: filteredRecords,
@@ -285,26 +289,33 @@ export default function App() {
       reportMonth: filters.month === 'all' ? 9 : filters.month,
       reportYear: filters.year === 'all' ? 2026 : filters.year,
       customNotes: savedNotes,
-      evaluationNote: savedEval,
+      evaluationNote: effectiveEval,
     });
   };
 
   const handleExportPDF = () => {
-    triggerPrintReport();
+    if (activeTab !== 'reports') {
+      setActiveTab('reports');
+      setTimeout(() => {
+        triggerPrintReport();
+      }, 300);
+    } else {
+      triggerPrintReport();
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans print:bg-white print:min-h-0">
       {/* Top Header */}
-      <Header
-        syncState={syncState}
-        onSync={handleSync}
-        onOpenSheetsModal={() => setIsSettingsOpen(true)}
-        role={userRole}
-        onChangeRole={setUserRole}
-        onExportWord={handleExportWord}
-        onExportPDF={handleExportPDF}
-      />
+      <div className="print:hidden">
+        <Header
+          syncState={syncState}
+          onSync={handleSync}
+          onOpenSheetsModal={() => setIsSettingsOpen(true)}
+          role={userRole}
+          onChangeRole={setUserRole}
+        />
+      </div>
 
       {/* Mobile Navigation Header */}
       <div className="md:hidden bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between print:hidden">
@@ -334,19 +345,21 @@ export default function App() {
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto">
-        {/* Desktop Sidebar */}
-        <Sidebar
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          role={userRole}
-          duplicateCount={duplicatesRemovedCount}
-          anomalyCount={0}
-        />
+      <div className="flex-1 flex max-w-7xl w-full mx-auto print:max-w-none print:w-full print:m-0 print:p-0 print:block">
+        {/* Desktop Sidebar (Ẩn hoàn toàn khi in/lưu PDF) */}
+        <div className="print:hidden">
+          <Sidebar
+            activeTab={activeTab}
+            onSelectTab={setActiveTab}
+            role={userRole}
+            duplicateCount={duplicatesRemovedCount}
+            anomalyCount={0}
+          />
+        </div>
 
         {/* Mobile Sidebar Overlay */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex">
+          <div className="md:hidden fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex print:hidden">
             <div className="w-64 bg-white h-full shadow-2xl flex flex-col">
               <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                 <span className="font-bold text-sm text-slate-900">Danh mục chức năng</span>
@@ -374,15 +387,17 @@ export default function App() {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto">
-          {/* Universal Filter Bar (shown on views that benefit from dynamic filtering) */}
-          {activeTab !== 'settings' && (
-            <FilterBar
-              filters={filters}
-              onChangeFilters={setFilters}
-              availableYears={availableYears}
-              unitsList={unitsList}
-            />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto print:p-0 print:m-0 print:overflow-visible print:block">
+          {/* Universal Filter Bar: Chỉ hiển thị ở các tab tra cứu & thống kê, ẩn ở tab Cấu hình và tab Báo cáo (vì tab Báo cáo có thanh điều khiển Tháng/Năm riêng biệt) */}
+          {activeTab !== 'settings' && activeTab !== 'reports' && (
+            <div className="print:hidden">
+              <FilterBar
+                filters={filters}
+                onChangeFilters={setFilters}
+                availableYears={availableYears}
+                unitsList={unitsList}
+              />
+            </div>
           )}
 
           {/* TAB: DASHBOARD */}
@@ -443,6 +458,7 @@ export default function App() {
               roleStats={roleStats}
               monthlyStats={monthlyStats}
               filters={filters}
+              onChangeFilters={setFilters}
               auditLogs={combinedAuditLogs}
             />
           )}

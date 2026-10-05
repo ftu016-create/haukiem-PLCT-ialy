@@ -20,8 +20,8 @@ interface KpiCardsProps {
 export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
   return (
     <div className="space-y-3 mb-5">
-      {/* Primary KPI Row - 6 Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Primary KPI Row - 5 Cards (Đã bỏ thẻ Tổng số lỗi theo yêu cầu Hình 2) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* 1. Tổng Phiếu công tác (PCT) */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs relative overflow-hidden group hover:border-blue-400 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -79,23 +79,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
           </div>
         </div>
 
-        {/* 5. Tổng số lỗi */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Tổng số lỗi</span>
-            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
-              <AlertCircle className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-2xl font-black text-amber-600 tracking-tight">
-              {overview.totalErrors.toLocaleString('vi-VN')}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">Tổng vi phạm tích lũy</p>
-          </div>
-        </div>
-
-        {/* 6. Số cá nhân mắc lỗi */}
+        {/* 5. Số cá nhân liên đới vi phạm */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs relative overflow-hidden group hover:border-purple-400 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Cá nhân liên đới</span>

@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 20mm 20mm 20mm 30mm !important; /* Nghị định 30: Trên 2cm, Dưới 2cm, Phải 2cm, Trái 3cm */
+  }
+
+  html, body, #root, div, main {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  header, aside, nav, .print\\:hidden {
+    display: none !important;
+  }
+
+  .print-paper {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+}

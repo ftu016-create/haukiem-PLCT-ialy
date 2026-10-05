@@ -65,24 +65,15 @@ const DonutItem: React.FC<DonutChartProps> = ({
     >
       <div>
         {/* Top Header with Clean Number Indicator (1, 2, 3) */}
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`w-7 h-7 rounded-xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-sm shadow-xs shrink-0 ring-2 ring-white`}
-            >
-              {indexNumber}
-            </div>
-            <h3 className="text-xs font-bold text-slate-900 tracking-tight truncate" title={title}>
-              {title}
-            </h3>
+        <div className="flex items-center gap-2.5 mb-4">
+          <div
+            className={`w-7 h-7 rounded-xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-sm shadow-xs shrink-0 ring-2 ring-white`}
+          >
+            {indexNumber}
           </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="p-1.5 rounded-lg bg-slate-50 text-slate-600 border border-slate-200/60">
-              {icon}
-            </div>
-            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition" />
-          </div>
+          <h3 className="text-xs font-bold text-slate-900 tracking-tight flex-1" title={title}>
+            {title}
+          </h3>
         </div>
 
         {/* Donut Chart Visualization */}

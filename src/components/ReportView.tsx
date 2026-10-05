@@ -31,6 +31,7 @@ interface ReportViewProps {
   roleStats: RoleStat[];
   monthlyStats: MonthlyBreakdown[];
   filters: FilterState;
+  onChangeFilters?: React.Dispatch<React.SetStateAction<FilterState>>;
   auditLogs?: AuditLogEntry[];
 }
 
@@ -42,10 +43,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
   roleStats,
   monthlyStats,
   filters,
+  onChangeFilters,
 }) => {
-  const [reportType, setReportType] = useState<'month' | 'year'>('month');
+  const [reportType, setReportType] = useState<'month' | 'year'>(
+    filters.month === 'all' ? 'year' : 'month'
+  );
   const [reportMonth, setReportMonth] = useState<number>(
-    filters.month === 'all' ? 9 : filters.month
+    filters.month === 'all' ? 8 : filters.month
   );
   const [reportYear, setReportYear] = useState<number>(
     filters.year === 'all' ? 2026 : filters.year
@@ -241,44 +245,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
         }
       `}</style>
 
-      {/* Configuration & Action Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs print:hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-blue-600" />
-              <span>Báo cáo & Xuất văn bản</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Xuất văn bản Word và PDF theo thể thức hành chính chuẩn (Khổ A4, Times New Roman 13pt, lề trái 3cm, trên/dưới/phải 2cm)
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportWord}
-              title="Xuất văn bản Word (.doc / .docx)"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
-            >
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span>Xuất file Word (.doc)</span>
-            </button>
-            <button
-              onClick={handlePrint}
-              title="In trực tiếp hoặc Lưu file PDF"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>In Báo cáo / Lưu PDF</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Report Selector Controls */}
-        <div className="flex flex-wrap items-center gap-3 pt-4">
+      {/* Thanh điều khiển Báo cáo Tháng / Năm (Đã loại bỏ khối banner trùng lặp theo yêu cầu) */}
+      <div className="bg-white rounded-xl border border-slate-200/80 px-4 py-3 shadow-xs print:hidden flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
             <button
-              onClick={() => setReportType('month')}
+              onClick={() => {
+                setReportType('month');
+                onChangeFilters?.((prev) => ({ ...prev, month: reportMonth, year: reportYear }));
+              }}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 reportType === 'month'
                   ? 'bg-white text-blue-600 shadow-xs'
@@ -288,7 +263,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
               Báo cáo Tháng
             </button>
             <button
-              onClick={() => setReportType('year')}
+              onClick={() => {
+                setReportType('year');
+                onChangeFilters?.((prev) => ({ ...prev, month: 'all', year: reportYear }));
+              }}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 reportType === 'year'
                   ? 'bg-white text-blue-600 shadow-xs'
@@ -304,7 +282,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <span className="text-slate-500">Kỳ tháng:</span>
               <select
                 value={reportMonth}
-                onChange={(e) => setReportMonth(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  const m = parseInt(e.target.value, 10);
+                  setReportMonth(m);
+                  onChangeFilters?.((prev) => ({ ...prev, month: m, year: reportYear }));
+                }}
                 className="bg-transparent font-bold text-slate-800 focus:outline-hidden cursor-pointer"
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -320,7 +302,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
             <span className="text-slate-500">Năm:</span>
             <select
               value={reportYear}
-              onChange={(e) => setReportYear(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const y = parseInt(e.target.value, 10);
+                setReportYear(y);
+                onChangeFilters?.((prev) => ({
+                  ...prev,
+                  year: y,
+                  month: reportType === 'month' ? reportMonth : 'all',
+                }));
+              }}
               className="bg-transparent font-bold text-slate-800 focus:outline-hidden cursor-pointer"
             >
               <option value={2026}>2026</option>
@@ -328,29 +318,50 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </select>
           </div>
         </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportWord}
+            title="Xuất văn bản Word (.doc)"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-600" />
+            <span>Xuất file Word (.doc)</span>
+          </button>
+          <button
+            onClick={handlePrint}
+            title="In trực tiếp hoặc Lưu file PDF"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>In Báo cáo / Lưu PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Official Corporate Report Layout */}
       <div className="print-paper bg-white rounded-2xl border border-slate-200 p-8 shadow-xs max-w-5xl mx-auto print:border-none print:shadow-none print:p-0">
         {/* Formal Corporate Header */}
         <div className="flex justify-between items-start pb-4 mb-6">
-          <div className="text-center w-[45%]">
-            <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 print:text-black">
+          <div className="text-center w-[40%]">
+            <p className="text-xs sm:text-sm font-bold uppercase text-slate-800 print:text-black whitespace-nowrap print:text-[11.5pt]">
               CÔNG TY THỦY ĐIỆN IALY
             </p>
-            <p className="text-xs sm:text-sm font-bold uppercase text-slate-900 print:text-black">
+            <p className="text-xs sm:text-sm font-bold uppercase text-slate-900 print:text-black whitespace-nowrap print:text-[11.5pt]">
               PX VẬN HÀNH IALY
             </p>
             <div className="w-24 sm:w-28 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
           </div>
 
-          <div className="text-center w-[55%]">
-            <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 print:text-black">
+          <div className="text-center w-[60%]">
+            <p className="text-xs sm:text-sm font-bold uppercase text-slate-800 print:text-black whitespace-nowrap print:text-[11pt]">
               CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
             </p>
-            <p className="text-xs sm:text-sm font-bold text-slate-800 print:text-black">Độc lập - Tự do - Hạnh phúc</p>
+            <p className="text-xs sm:text-sm font-bold text-slate-800 print:text-black whitespace-nowrap print:text-[11.5pt]">
+              Độc lập - Tự do - Hạnh phúc
+            </p>
             <div className="w-32 sm:w-36 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
-            <p className="text-[11px] sm:text-xs text-slate-600 print:text-black italic mt-1.5">
+            <p className="text-[11px] sm:text-xs text-slate-600 print:text-black italic mt-1.5 whitespace-nowrap">
               Gia Lai, ngày ..... tháng ..... năm 202...
             </p>
           </div>
@@ -367,57 +378,75 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* MỤC 1: BIỂU ĐỒ DẠNG CỘT TỶ LỆ PHIẾU LỖI, LỆNH LỖI, TỔNG LỖI */}
+        {/* MỤC 1: BIỂU ĐỒ PHẦN TRĂM DẠNG TRÒN TỶ LỆ PHIẾU LỖI, LỆNH LỖI, TỔNG LỖI */}
         {/* ========================================================================= */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-900 flex items-center gap-1.5">
-              <BarChart3 className="w-4 h-4 text-blue-600" />
-              <span>I. BIỂU ĐỒ TỶ LỆ VI PHẠM & KẾT QUẢ SOÁT PHIẾU CÔNG TÁC, LỆNH CÔNG TÁC</span>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+              <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
+              <span><b>I. Biểu đồ tỷ lệ vi phạm & kết quả soát phiếu công tác, lệnh công tác</b></span>
             </h3>
             <span className="text-[11px] text-slate-500 italic print:hidden">
               (Nhấp vào từng cột để mở danh sách chi tiết các phiếu, lệnh vi phạm)
             </span>
           </div>
 
-          {/* 3 Cột Biểu đồ trực quan có màu, không chứa mục lỗi tiêu biểu */}
+          {/* 3 Cột Biểu đồ phần trăm dạng tròn trực quan có màu (Khung màu như hình đính kèm) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-            {/* Cột 1: TỶ LỆ PHIẾU CÔNG TÁC (PCT) LỖI */}
+            {/* Cột 1: TỶ LỆ PHIẾU CÔNG TÁC (PCT) LỖI - Viền xanh dương */}
             <div
               onClick={() => {
                 setDrilldownType('PCT');
                 setModalSearchTerm('');
               }}
-              className="bg-gradient-to-b from-blue-50/70 via-white to-blue-50/30 rounded-2xl border-2 border-blue-200 hover:border-blue-500 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group"
+              className="bg-white rounded-xl border-2 border-blue-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
-                    <div className="p-1 rounded-md bg-blue-100 text-blue-700">
+                    <div className="p-1 rounded-md bg-blue-100 text-blue-700 print:hidden">
                       <FileText className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                    <span className="text-xs font-bold uppercase tracking-wider text-blue-900 print:text-blue-900 whitespace-nowrap">
                       Phiếu công tác (PCT)
                     </span>
                   </div>
                   <ExternalLink className="w-3.5 h-3.5 text-blue-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Visual Bar Column Representation */}
-                <div className="my-3 bg-slate-100 rounded-xl p-2.5 flex flex-col items-center">
-                  <div className="w-full bg-slate-200 h-28 rounded-lg relative overflow-hidden flex flex-col justify-end">
-                    <div
-                      className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-b-lg transition-all duration-500"
-                      style={{ height: `${Math.max(Number(pctErrorRate), 8)}%` }}
-                    ></div>
+                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
+                <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="relative w-28 h-28 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#dbeafe"
+                        strokeWidth="11"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#2563eb"
+                        strokeWidth="11"
+                        strokeDasharray={238.76}
+                        strokeDashoffset={238.76 * (1 - Math.min(Math.max(Number(pctErrorRate), 0), 100) / 100)}
+                        strokeLinecap="round"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                      <span className="text-xl font-black font-mono tracking-tight text-blue-700">
+                        {pctErrorRate}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 text-center">
-                    <div className="text-2xl font-black text-blue-700 font-mono tracking-tight">
-                      {pctErrorRate}%
-                    </div>
-                    <div className="text-[11px] text-slate-600 font-medium">
-                      <strong className="text-rose-600 font-bold">{pctErrorList.length}</strong> / {pctList.length} phiếu có lỗi
-                    </div>
+                  <div className="mt-2 text-center text-xs text-slate-700 print:text-black font-medium">
+                    <strong className="text-rose-600 print:text-black font-bold">{pctErrorList.length}</strong> / {pctList.length} phiếu có lỗi
                   </div>
                 </div>
               </div>
@@ -431,42 +460,60 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             </div>
 
-            {/* Cột 2: TỶ LỆ LỆNH CÔNG TÁC (LCT) LỖI */}
+            {/* Cột 2: TỶ LỆ LỆNH CÔNG TÁC (LCT) LỖI - Viền xanh lá */}
             <div
               onClick={() => {
                 setDrilldownType('LCT');
                 setModalSearchTerm('');
               }}
-              className="bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 rounded-2xl border-2 border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group"
+              className="bg-white rounded-xl border-2 border-emerald-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
-                    <div className="p-1 rounded-md bg-emerald-100 text-emerald-700">
+                    <div className="p-1 rounded-md bg-emerald-100 text-emerald-700 print:hidden">
                       <FileCheck className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 print:text-emerald-900 whitespace-nowrap">
                       Lệnh công tác (LCT)
                     </span>
                   </div>
                   <ExternalLink className="w-3.5 h-3.5 text-emerald-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Visual Bar Column Representation */}
-                <div className="my-3 bg-slate-100 rounded-xl p-2.5 flex flex-col items-center">
-                  <div className="w-full bg-slate-200 h-28 rounded-lg relative overflow-hidden flex flex-col justify-end">
-                    <div
-                      className="w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-b-lg transition-all duration-500"
-                      style={{ height: `${Math.max(Number(lctErrorRate), 8)}%` }}
-                    ></div>
+                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
+                <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="relative w-28 h-28 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#d1fae5"
+                        strokeWidth="11"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#059669"
+                        strokeWidth="11"
+                        strokeDasharray={238.76}
+                        strokeDashoffset={238.76 * (1 - Math.min(Math.max(Number(lctErrorRate), 0), 100) / 100)}
+                        strokeLinecap="round"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                      <span className="text-xl font-black font-mono tracking-tight text-emerald-700">
+                        {lctErrorRate}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 text-center">
-                    <div className="text-2xl font-black text-emerald-700 font-mono tracking-tight">
-                      {lctErrorRate}%
-                    </div>
-                    <div className="text-[11px] text-slate-600 font-medium">
-                      <strong className="text-rose-600 font-bold">{lctErrorList.length}</strong> / {lctList.length} lệnh có lỗi
-                    </div>
+                  <div className="mt-2 text-center text-xs text-slate-700 print:text-black font-medium">
+                    <strong className="text-rose-600 print:text-black font-bold">{lctErrorList.length}</strong> / {lctList.length} lệnh có lỗi
                   </div>
                 </div>
               </div>
@@ -480,42 +527,60 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             </div>
 
-            {/* Cột 3: TỔNG PHIẾU + LỆNH LỖI */}
+            {/* Cột 3: TỔNG PHIẾU + LỆNH LỖI - Viền đỏ */}
             <div
               onClick={() => {
                 setDrilldownType('ALL');
                 setModalSearchTerm('');
               }}
-              className="bg-gradient-to-b from-rose-50/70 via-white to-rose-50/30 rounded-2xl border-2 border-rose-200 hover:border-rose-500 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group"
+              className="bg-white rounded-xl border-2 border-rose-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
-                    <div className="p-1 rounded-md bg-rose-100 text-rose-700">
+                    <div className="p-1 rounded-md bg-rose-100 text-rose-700 print:hidden">
                       <AlertTriangle className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-rose-900">
+                    <span className="text-xs font-bold uppercase tracking-wider text-rose-900 print:text-rose-900 whitespace-nowrap">
                       Tổng Phiếu + Lệnh lỗi
                     </span>
                   </div>
                   <ExternalLink className="w-3.5 h-3.5 text-rose-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Visual Bar Column Representation */}
-                <div className="my-3 bg-slate-100 rounded-xl p-2.5 flex flex-col items-center">
-                  <div className="w-full bg-slate-200 h-28 rounded-lg relative overflow-hidden flex flex-col justify-end">
-                    <div
-                      className="w-full bg-gradient-to-t from-rose-600 to-rose-400 rounded-b-lg transition-all duration-500"
-                      style={{ height: `${Math.max(Number(totalErrorRate), 8)}%` }}
-                    ></div>
+                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
+                <div className="my-2 flex flex-col items-center justify-center">
+                  <div className="relative w-28 h-28 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#ffe4e6"
+                        strokeWidth="11"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#e11d48"
+                        strokeWidth="11"
+                        strokeDasharray={238.76}
+                        strokeDashoffset={238.76 * (1 - Math.min(Math.max(Number(totalErrorRate), 0), 100) / 100)}
+                        strokeLinecap="round"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                      <span className="text-xl font-black font-mono tracking-tight text-rose-700">
+                        {totalErrorRate}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 text-center">
-                    <div className="text-2xl font-black text-rose-700 font-mono tracking-tight">
-                      {totalErrorRate}%
-                    </div>
-                    <div className="text-[11px] text-slate-600 font-medium">
-                      <strong className="text-rose-600 font-bold">{totalErrorList.length}</strong> / {totalDocsList.length} hồ sơ có lỗi
-                    </div>
+                  <div className="mt-2 text-center text-xs text-slate-700 print:text-black font-medium">
+                    <strong className="text-rose-600 print:text-black font-bold">{totalErrorList.length}</strong> / {totalDocsList.length} hồ sơ có lỗi
                   </div>
                 </div>
               </div>
@@ -704,40 +769,40 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* Section 2: 12 Months Breakdown (if Year mode) */}
         {reportType === 'year' && (
           <div className="mb-6">
-            <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-900 mb-2">
-              II. DIỄN BIẾN SỐ LIỆU QUA 12 THÁNG TRONG NĂM {reportYear}
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 print:text-black">
+              <b>II. Diễn biến số liệu qua 12 tháng trong năm {reportYear}</b>
             </h3>
-            <div className="border border-slate-300 rounded-lg overflow-x-auto">
+            <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black">
               <table className="w-full text-xs">
-                <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center">
+                <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center print:bg-transparent print:border-black print:text-black">
                   <tr>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Tháng</th>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Số PCT</th>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Số LCT</th>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Tổng Phiếu/Lệnh</th>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Số vi phạm</th>
-                    <th className="py-1.5 px-2 border-r border-slate-300">Tổng số lỗi</th>
-                    <th className="py-1.5 px-2">Tỷ lệ vi phạm (%)</th>
+                    <th className="py-2 px-3 border-r border-slate-300 print:border-black whitespace-nowrap min-w-[95px]">Tháng</th>
+                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số PCT</th>
+                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số LCT</th>
+                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Tổng Phiếu/Lệnh</th>
+                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số vi phạm</th>
+                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Tổng số lỗi</th>
+                    <th className="py-2 px-2 print:border-black">Tỷ lệ vi phạm (%)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-center">
+                <tbody className="divide-y divide-slate-200 print:divide-black text-center">
                   {monthlyStats.map((m) => (
-                    <tr key={m.month} className="hover:bg-slate-50">
-                      <td className="py-1.5 px-2 font-bold border-r border-slate-200">
-                        Tháng {m.month < 10 ? '0' + m.month : m.month}
+                    <tr key={m.month} className="hover:bg-slate-50 print:bg-transparent">
+                      <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black whitespace-nowrap min-w-[95px]">
+                        {m.monthLabel}
                       </td>
-                      <td className="py-1.5 px-2 font-mono border-r border-slate-200">{m.pctCount}</td>
-                      <td className="py-1.5 px-2 font-mono border-r border-slate-200">{m.lctCount}</td>
-                      <td className="py-1.5 px-2 font-mono font-bold border-r border-slate-200">
+                      <td className="py-2 px-2 font-mono border-r border-slate-200 print:border-black print:text-black">{m.pctCount}</td>
+                      <td className="py-2 px-2 font-mono border-r border-slate-200 print:border-black print:text-black">{m.lctCount}</td>
+                      <td className="py-2 px-2 font-mono font-bold border-r border-slate-200 print:border-black print:text-black">
                         {m.totalDocuments}
                       </td>
-                      <td className="py-1.5 px-2 font-mono text-rose-600 font-bold border-r border-slate-200">
+                      <td className="py-2 px-2 font-mono text-rose-600 font-bold border-r border-slate-200 print:border-black print:text-black">
                         {m.errorDocuments}
                       </td>
-                      <td className="py-1.5 px-2 font-mono text-amber-600 font-black border-r border-slate-200">
+                      <td className="py-2 px-2 font-mono text-amber-600 font-black border-r border-slate-200 print:border-black print:text-black">
                         {m.totalErrors}
                       </td>
-                      <td className="py-1.5 px-2 font-mono">{m.errorRate}%</td>
+                      <td className="py-2 px-2 font-mono print:border-black print:text-black">{m.errorRate}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -746,46 +811,39 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         )}
 
-        {/* Section: Workshop Breakdown */}
+        {/* Section: Workshop Breakdown (Bỏ cột Chức danh quy định theo yêu cầu) */}
         <div className="mb-6">
-          <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-900 mb-2 flex flex-wrap items-center justify-between gap-1">
-            <span>{reportType === 'month' ? 'II.' : 'III.'} TỔNG HỢP THEO PHÂN XƯỞNG (PXVH & PXSC)</span>
-            <span className="text-[10px] sm:text-xs text-slate-500 font-normal italic lowercase">
-              (CHTT, ĐCT thuộc PX Sửa chữa; Cấp phiếu, Cho phép thuộc PX Vận hành)
-            </span>
+          <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 print:text-black">
+            <b>{reportType === 'month' ? 'II.' : 'III.'} Tổng hợp theo phân xưởng (PXVH & PXSC)</b>
           </h3>
 
-          <div className="border border-slate-300 rounded-lg overflow-x-auto">
+          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black">
             <table className="w-full text-xs">
-              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center print:bg-transparent print:border-black print:text-black">
                 <tr>
-                  <th className="py-2 px-3 text-left border-r border-slate-300">Đơn vị / Phân xưởng</th>
-                  <th className="py-2 px-3 text-left border-r border-slate-300">Chức danh quy định</th>
-                  <th className="py-2 px-3 border-r border-slate-300">Số cá nhân</th>
-                  <th className="py-2 px-3 border-r border-slate-300">Số Phiếu/Lệnh vi phạm</th>
-                  <th className="py-2 px-3 border-r border-slate-300">Tổng số lỗi</th>
-                  <th className="py-2 px-3">Tỷ trọng lỗi (%)</th>
+                  <th className="py-2 px-3 text-left border-r border-slate-300 print:border-black w-[40%]">Đơn vị / Phân xưởng</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Số cá nhân</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Số Phiếu/Lệnh vi phạm</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Tổng số lỗi</th>
+                  <th className="py-2 px-3 w-[15%]">Tỷ trọng lỗi (%)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 print:divide-black">
                 {workshopStats.map((ws) => (
-                  <tr key={ws.shortName} className="hover:bg-slate-50">
-                    <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200">
+                  <tr key={ws.shortName} className="hover:bg-slate-50 print:bg-transparent">
+                    <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200 print:border-black print:text-black">
                       {ws.workshopName} ({ws.shortName})
                     </td>
-                    <td className="py-2 px-3 text-slate-600 text-[11px] border-r border-slate-200">
-                      {ws.roles.join(', ')}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono border-r border-slate-200">
+                    <td className="py-2 px-3 text-center font-mono border-r border-slate-200 print:border-black print:text-black">
                       {ws.peopleCount}
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-rose-600 font-bold border-r border-slate-200">
+                    <td className="py-2 px-3 text-center font-mono text-rose-600 font-bold border-r border-slate-200 print:border-black print:text-black">
                       {ws.violationDocuments}
                     </td>
-                    <td className="py-2 px-3 text-center font-mono font-black text-amber-600 border-r border-slate-200">
+                    <td className="py-2 px-3 text-center font-mono font-black text-amber-600 border-r border-slate-200 print:border-black print:text-black">
                       {ws.totalErrors}
                     </td>
-                    <td className="py-2 px-3 text-center font-mono font-bold">
+                    <td className="py-2 px-3 text-center font-mono font-bold print:border-black print:text-black">
                       {ws.errorShare}%
                     </td>
                   </tr>
@@ -795,24 +853,32 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         </div>
 
-        {/* Section: Evaluation & Additional Notes (Có thể sửa trực tiếp và xuất Word/PDF) */}
+        {/* Section: Evaluation & Additional Notes (Bỏ khung viền, thụt đầu dòng 1.27cm theo yêu cầu) */}
         <div className="mb-6">
-          <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-900 mb-2 flex items-center justify-between">
-            <span>{reportType === 'month' ? 'III.' : 'IV.'} ĐÁNH GIÁ, KIẾN NGHỊ & GHI CHÚ BỔ SUNG</span>
+          <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 flex items-center justify-between print:text-black">
+            <span><b>{reportType === 'month' ? 'III.' : 'IV.'} Đánh giá, kiến nghị & ghi chú bổ sung</b></span>
             <span className="text-[11px] text-slate-400 font-normal italic print:hidden">
-              (Nhấp vào khung dưới để chỉnh sửa nội dung đánh giá)
+              (Nhấp vào để chỉnh sửa nội dung đánh giá)
             </span>
           </h3>
-          <div className="border border-slate-300 rounded-lg p-3 bg-slate-50/30">
+          <div className="mt-1">
             <textarea
               rows={3}
               value={evaluationNote}
               onChange={(e) => handleUpdateEvaluation(e.target.value)}
-              className="print:hidden w-full bg-transparent hover:bg-blue-50/40 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded p-1.5 text-xs text-slate-800 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y leading-relaxed"
+              className="print:hidden w-full bg-slate-50/70 hover:bg-white focus:bg-white focus:ring-1 focus:ring-blue-500 rounded-lg p-2.5 text-xs text-slate-800 border border-slate-200 focus:border-blue-500 transition resize-y leading-relaxed"
+              style={{ textIndent: '1.27cm' }}
               placeholder="Nhập nội dung đánh giá, kiến nghị hoặc ghi chú thêm cho báo cáo..."
             />
-            <div className="hidden print:block text-[13pt] text-slate-900 leading-normal whitespace-pre-wrap">
-              {evaluationNote}
+            <div className="hidden print:block text-[13pt] text-black leading-relaxed">
+              {evaluationNote
+                .split('\n')
+                .filter((line) => line.trim())
+                .map((para, pIdx) => (
+                  <p key={pIdx} style={{ textIndent: '1.27cm' }} className="mb-1 text-justify">
+                    {para}
+                  </p>
+                ))}
             </div>
           </div>
         </div>

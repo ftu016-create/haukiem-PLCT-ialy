@@ -117,11 +117,20 @@ export function calculateOverview(records: NormalizedRecord[]): StatisticsOvervi
       if (isPCT) pctWithErrors++;
       if (isLCT) lctWithErrors++;
 
-      // Thống kê toàn bộ chức danh liên đới (Người cấp phiếu, CHTT, Người cho phép, NVĐVCT, Người ra lệnh, Giám sát...)
-      [rec.issuer, rec.leader, rec.approver, rec.workers, rec.orderGiver, rec.supervisor, rec.extraPersonnel].forEach((p) => {
-        if (p && typeof p === 'string') {
-          // Hỗ trợ trường hợp ô chứa nhiều nhân sự ngăn cách bởi dấu phẩy, chấm phẩy hoặc xuống dòng
-          const names = p.split(/[,;\n\r]| và /);
+      // Thống kê cá nhân vi phạm chuẩn theo chức danh vi phạm được nêu trong Danh Sách Lỗi
+      const respRoles = getResponsibleRolesFromErrors(rec.parsedErrors, rec.rawErrors);
+      const rolesMap: { role: TrackedRoleKey; val: string | undefined }[] = [
+        { role: 'issuer', val: rec.issuer },
+        { role: 'leader', val: rec.leader },
+        { role: 'approver', val: rec.approver },
+        { role: 'workers', val: rec.workers },
+        { role: 'orderGiver', val: rec.orderGiver },
+        { role: 'supervisor', val: rec.supervisor },
+      ];
+
+      rolesMap.forEach(({ role, val }) => {
+        if (respRoles.has(role) && val && typeof val === 'string') {
+          const names = val.split(/[,;\n\r]| và /);
           names.forEach((n) => {
             const trimmed = n.trim();
             if (
@@ -193,117 +202,110 @@ export function getResponsibleRolesFromErrors(
 ): Set<TrackedRoleKey> {
   const result = new Set<TrackedRoleKey>();
 
+  const lowerRaw = (rawErrors || '').toLowerCase();
   if (
-    parsedErrors.length === 0 &&
-    (!rawErrors ||
-      rawErrors.toLowerCase().includes('không phát hiện lỗi') ||
-      rawErrors.toLowerCase().includes('hợp lệ'))
+    (!parsedErrors || parsedErrors.length === 0) &&
+    (!lowerRaw ||
+      lowerRaw.includes('không phát hiện lỗi') ||
+      lowerRaw.includes('hợp lệ'))
   ) {
     return result;
   }
 
-  parsedErrors.forEach((err) => {
-    const text = (err.message + ' ' + (err.ruleReference || '')).toLowerCase();
-    let matched = false;
+  // Thu thập chuỗi lỗi từ parsedErrors và rawErrors
+  const errorStrings: string[] = [];
+  if (parsedErrors && parsedErrors.length > 0) {
+    parsedErrors.forEach((e) => errorStrings.push(`${e.message} ${e.ruleReference || ''}`));
+  }
+  if (rawErrors && errorStrings.length === 0) {
+    errorStrings.push(rawErrors);
+  }
+
+  errorStrings.forEach((str) => {
+    const text = str.toLowerCase();
 
     // 1. Kiểm tra Người CHTT / Chỉ huy trực tiếp
+    // (Bao gồm: CHTT, chỉ huy trực tiếp, tiếp đất di động của CHTT, hoàn thành công việc của CHTT, Điều 30...)
     if (
       text.includes('chtt') ||
       text.includes('chỉ huy trực tiếp') ||
       text.includes('chi huy truc tiep') ||
-      text.includes('vị trí làm việc') ||
+      text.includes('chỉ huy') ||
       text.includes('tiếp đất di động') ||
-      text.includes('điều 30 quy trình 278') || // Hoàn thành công việc của CHTT
-      text.includes('bpat bổ sung') ||
-      text.includes('biện pháp an toàn bổ sung của đơn vị công tác')
+      text.includes('điều 30') ||
+      text.includes('bpat bổ sung của đơn vị công tác') ||
+      text.includes('biện pháp an toàn bổ sung của đơn vị công tác') ||
+      text.includes('biện pháp an toàn làm thêm của đơn vị công tác')
     ) {
       result.add('leader');
-      matched = true;
     }
 
-    // 2. Kiểm tra Nhân viên Đơn vị công tác (NVĐVCT / NVĐCT)
-    if (
-      text.includes('nhân viên') ||
-      text.includes('nvdvct') ||
-      text.includes('nvđvct') ||
-      text.includes('nvđct') ||
-      text.includes('đơn vị công tác') ||
-      text.includes('bậc an toàn của nhân viên')
-    ) {
-      result.add('workers');
-      result.add('leader');
-      matched = true;
-    }
-
-    // 3. Kiểm tra Người Ra Lệnh (NRL) trong LCT
-    if (
-      text.includes('ra lệnh') ||
-      text.includes('nrl') ||
-      text.includes('người ra lệnh') ||
-      text.includes('lệnh công tác')
-    ) {
-      result.add('orderGiver');
-      matched = true;
-    }
-
-    // 4. Kiểm tra Người Cho Phép
+    // 2. Kiểm tra Người Cho Phép
+    // (Bao gồm: Người cho phép, thủ tục cho phép, ký cho phép, khóa phiếu, khoá phiếu, thắt tiếp đất, tiếp đất của đơn vị vận hành, trực ban, trưởng ca, Điều 31...)
     if (
       text.includes('người cho phép') ||
       text.includes('nguoi cho phep') ||
+      text.includes('cho phép công tác') ||
+      text.includes('thủ tục cho phép') ||
+      text.includes('ký cho phép') ||
       text.includes('khóa phiếu') ||
-      text.includes('điều 31 quy trình 278') || // Khóa phiếu của Người cho phép
-      text.includes('tiếp đất của đơn vị vận hành') ||
+      text.includes('khoá phiếu') ||
       text.includes('thắt tiếp đất') ||
+      text.includes('tiếp đất của đơn vị vận hành') ||
       text.includes('trực ban') ||
-      text.includes('trưởng ca')
+      text.includes('trưởng ca') ||
+      text.includes('điều 31')
     ) {
       result.add('approver');
-      matched = true;
     }
 
-    // 5. Kiểm tra Người Cấp Phiếu
+    // 3. Kiểm tra Người Cấp Phiếu / Người Cấp Lệnh
+    // (Bao gồm: Người cấp phiếu, người cấp lệnh, cấp lệnh, cấp phiếu, kiểm tra hoàn thành phiếu...)
     if (
       text.includes('người cấp phiếu') ||
       text.includes('nguoi cap phieu') ||
+      text.includes('người cấp lệnh') ||
+      text.includes('nguoi cap lenh') ||
+      text.includes('cấp lệnh') ||
       text.includes('cấp phiếu') ||
       text.includes('kiểm tra hoàn thành phiếu')
     ) {
       result.add('issuer');
-      matched = true;
+      result.add('orderGiver');
+    }
+
+    // 4. Kiểm tra Nhân viên Đơn vị công tác (NVĐVCT / NVĐCT / Nhân viên)
+    if (
+      text.includes('nhân viên đct') ||
+      text.includes('nhân viên đơn vị công tác') ||
+      text.includes('nhân viên công tác') ||
+      text.includes('nhân viên') ||
+      text.includes('nvdvct') ||
+      text.includes('nvđvct') ||
+      text.includes('nvđct') ||
+      text.includes('đơn vị công tác')
+    ) {
+      result.add('workers');
+    }
+
+    // 5. Kiểm tra Người Ra Lệnh trong LCT
+    if (
+      text.includes('người ra lệnh') ||
+      text.includes('nguoi ra lenh') ||
+      text.includes('ra lệnh') ||
+      text.includes('nrl')
+    ) {
+      result.add('orderGiver');
     }
 
     // 6. Kiểm tra Người Giám Sát an toàn
-    if (text.includes('giám sát') || text.includes('gsat')) {
+    if (
+      text.includes('giám sát an toàn') ||
+      text.includes('người giám sát') ||
+      text.includes('giám sát') ||
+      text.includes('gsat')
+    ) {
       result.add('supervisor');
-      matched = true;
-    }
-
-    // 7. Các lỗi nghịch lý thời gian hoặc quy trình liên đới 2 bên
-    if (
-      text.includes('nghịch lý thời gian') ||
-      (text.includes('cho phép ký trước') && text.includes('cấp phiếu'))
-    ) {
-      result.add('approver');
-      result.add('issuer');
-      matched = true;
-    }
-
-    if (
-      text.includes('cho bắt đầu làm việc trước khi') ||
-      (text.includes('chỉ huy trực tiếp') && text.includes('bàn giao'))
-    ) {
-      result.add('leader');
-      result.add('approver');
-      matched = true;
-    }
-
-    // 8. Nếu lỗi chung về chức danh / bậc an toàn hoặc chung
-    if (!matched) {
-      result.add('leader');
-      result.add('approver');
-      result.add('issuer');
-      result.add('workers');
-      result.add('orderGiver');
     }
   });
 
@@ -471,9 +473,13 @@ export function calculatePersonalAnalysis(
     }
   }
 
-  // Sắp xếp theo số phiếu/lệnh vi phạm giảm dần, sau đó đến số hồ sơ tham gia
-  return filtered.sort(
-    (a, b) => b.errorDocumentsCount - a.errorDocumentsCount || b.documentsCount - a.documentsCount
+  // Theo quy tắc của người dùng: "ai không vi phạm thì không thống kê"
+  // Chỉ lọc lấy những nhân sự có số phiếu/lệnh vi phạm (errorDocumentsCount > 0)
+  const violatorsOnly = filtered.filter((p) => p.errorDocumentsCount > 0);
+
+  // Sắp xếp theo số phiếu/lệnh vi phạm giảm dần, sau đó đến tổng số lỗi
+  return violatorsOnly.sort(
+    (a, b) => b.errorDocumentsCount - a.errorDocumentsCount || b.totalErrors - a.totalErrors
   );
 }
 
