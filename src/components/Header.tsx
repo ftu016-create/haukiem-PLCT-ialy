@@ -103,15 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'Google Sheets đã kết nối'}
                 </span>
               </div>
-              {syncState.totalDuplicatesRemoved > 0 && (
-                <>
-                  <span className="text-slate-300">|</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-medium border border-amber-200">
-                    <CheckCircle2 className="w-3 h-3 text-amber-600" />
-                    Lọc {syncState.totalDuplicatesRemoved} trùng 100%
-                  </span>
-                </>
-              )}
               {syncState.lastSyncTime && (
                 <>
                   <span className="text-slate-300">|</span>
