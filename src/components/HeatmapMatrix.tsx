@@ -240,7 +240,7 @@ export const HeatmapMatrix: React.FC<HeatmapMatrixProps> = ({
                         <div className="inline-flex flex-col gap-0.5">
                           {person.hasMonthlyAlert && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white shadow-xs">
-                              ≥ 2 hồ sơ / tháng
+                              ≥ 2 phiếu/lệnh / tháng
                             </span>
                           )}
                           {person.hasYearlyAlert && (

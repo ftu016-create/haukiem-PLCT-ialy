@@ -376,7 +376,7 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
                     {drilldownType === 'ALL' && 'Danh sách Chi tiết Tất cả Phiếu & Lệnh công tác có vi phạm'}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> hồ sơ vi phạm
+                    Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu/lệnh vi phạm
                   </p>
                 </div>
               </div>
@@ -408,7 +408,7 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
               {activeModalRecords.length === 0 ? (
                 <div className="py-12 text-center text-slate-400">
                   <ShieldAlert className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs">Không tìm thấy hồ sơ vi phạm nào phù hợp với từ khóa.</p>
+                  <p className="text-xs">Không tìm thấy phiếu/lệnh vi phạm nào phù hợp với từ khóa.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

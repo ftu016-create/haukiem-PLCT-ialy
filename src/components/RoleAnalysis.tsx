@@ -56,14 +56,14 @@ export const RoleAnalysis: React.FC<RoleAnalysisProps> = ({ roleStats }) => {
                     <div className="text-xl font-black text-slate-900">{role.personCount}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-500">Tổng hồ sơ soát</div>
+                    <div className="text-[10px] text-slate-500">Tổng phiếu/lệnh soát</div>
                     <div className="text-xl font-bold text-slate-800">{role.documentCount}</div>
                   </div>
                 </div>
 
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center justify-between text-slate-600">
-                    <span>Hồ sơ có sai sót:</span>
+                    <span>Phiếu/lệnh có sai sót:</span>
                     <strong className="text-rose-600 font-bold">{role.errorDocumentCount}</strong>
                   </div>
                   <div className="flex items-center justify-between text-slate-600">
@@ -71,7 +71,7 @@ export const RoleAnalysis: React.FC<RoleAnalysisProps> = ({ roleStats }) => {
                     <strong className="text-amber-600 font-bold">{role.totalErrors}</strong>
                   </div>
                   <div className="flex items-center justify-between text-slate-600">
-                    <span>Tỷ lệ hồ sơ lỗi:</span>
+                    <span>Tỷ lệ lỗi:</span>
                     <strong className="text-slate-800 font-bold">{role.errorRate}%</strong>
                   </div>
                   <div className="flex items-center justify-between text-slate-600">
@@ -113,9 +113,9 @@ export const RoleAnalysis: React.FC<RoleAnalysisProps> = ({ roleStats }) => {
                 <tr>
                   <th className="py-3 px-3 w-12 text-center">STT</th>
                   <th className="py-3 px-4 min-w-[200px]">Họ và tên cán bộ / nhân viên</th>
-                  <th className="py-3 px-3 text-center min-w-[120px]">Số hồ sơ tham gia</th>
+                  <th className="py-3 px-3 text-center min-w-[120px]">Số phiếu/lệnh tham gia</th>
                   <th className="py-3 px-3 text-center min-w-[120px]">Tổng số lỗi phát hiện</th>
-                  <th className="py-3 px-3 text-center min-w-[120px]">Mật độ lỗi / hồ sơ</th>
+                  <th className="py-3 px-3 text-center min-w-[120px]">Mật độ lỗi / phiếu</th>
                   <th className="py-3 px-3 text-center min-w-[140px]">Đánh giá rủi ro</th>
                 </tr>
               </thead>

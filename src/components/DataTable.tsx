@@ -172,7 +172,7 @@ export const DataTable: React.FC<DataTableProps> = ({ records, onSelectRecord })
             {paginatedRecords.length === 0 ? (
               <tr>
                 <td colSpan={9} className="py-10 text-center text-slate-400">
-                  Không tìm thấy hồ sơ nào khớp với điều kiện tìm kiếm.
+                  Không tìm thấy phiếu/lệnh nào khớp với điều kiện tìm kiếm.
                 </td>
               </tr>
             ) : (
@@ -301,7 +301,7 @@ export const DataTable: React.FC<DataTableProps> = ({ records, onSelectRecord })
                     <td className="py-2.5 px-3 text-center">
                       <button
                         onClick={() => setSelectedModalRecord(rec)}
-                        title="Xem đầy đủ chi tiết hồ sơ"
+                        title="Xem đầy đủ chi tiết"
                         className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-600 transition cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
@@ -326,7 +326,7 @@ export const DataTable: React.FC<DataTableProps> = ({ records, onSelectRecord })
           <strong className="text-slate-800">
             {Math.min(currentPage * pageSize, filteredRecords.length)}
           </strong>{' '}
-          trên tổng số <strong className="text-slate-800">{filteredRecords.length}</strong> hồ sơ
+          trên tổng số <strong className="text-slate-800">{filteredRecords.length}</strong> phiếu/lệnh
         </div>
 
         <div className="flex items-center gap-2">

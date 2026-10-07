@@ -115,7 +115,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ monthlyData, targe
                     {isHovered && (
                       <div className="absolute -top-20 z-20 bg-slate-900 text-white rounded-lg p-2 text-[11px] shadow-xl whitespace-nowrap pointer-events-none">
                         <div className="font-bold text-amber-300">Tháng {d.month < 10 ? '0' + d.month : d.month}/{targetYear}</div>
-                        <div>Tổng hồ sơ: <span className="font-semibold">{d.totalDocuments}</span></div>
+                        <div>Tổng phiếu/lệnh: <span className="font-semibold">{d.totalDocuments}</span></div>
                         <div className="text-blue-300">PCT: {d.pctCount} | LCT: {d.lctCount}</div>
                         <div className="text-rose-300">Có lỗi: {d.errorDocuments} | Hợp lệ: {d.validDocuments}</div>
                       </div>

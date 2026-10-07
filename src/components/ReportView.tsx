@@ -18,6 +18,15 @@ import {
   Lock,
   Unlock,
   ShieldCheck,
+  BookOpen,
+  Check,
+  Copy,
+  Upload,
+  Image as ImageIcon,
+  Users,
+  PenTool,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import {
   AuditLogEntry,
@@ -34,11 +43,20 @@ import {
   calculateWorkshopAnalysis,
   getDetailedViolationList,
   DEFAULT_RECOMMENDATIONS,
+  SUGGESTED_RECOMMENDATIONS_LIST,
+  SuggestionItem,
   generateSmartEvaluationAndRecommendations,
   getDefaultEvaluationNotes,
   AUDIT_TEAM_MEMBERS,
 } from '../engine/statisticsEngine';
 import { exportToWord, triggerPrintReport } from '../utils/exportService';
+import {
+  getMemberSignatureSvg,
+  saveCustomMemberSignature,
+  resetCustomMemberSignature,
+  hasCustomSignature,
+} from '../utils/signatureService';
+import { SignatureModal } from './SignatureModal';
 
 interface ReportViewProps {
   overview: StatisticsOverview;
@@ -96,6 +114,86 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
   // Khóa định danh kỳ báo cáo (để lưu và đồng bộ đánh giá riêng cho từng tháng)
   const periodKey = `${reportType}_${reportType === 'month' ? reportMonth : 'all'}_${reportYear}`;
+
+  // Ngày lập báo cáo (Gia Lai, ngày ... tháng ... năm ...)
+  const [docDay, setDocDay] = useState<string>(() => {
+    return localStorage.getItem('ialy_report_doc_day') || '';
+  });
+  const [docMonth, setDocMonth] = useState<string>(() => {
+    return localStorage.getItem('ialy_report_doc_month') || '';
+  });
+  const [docYear, setDocYear] = useState<string>(() => {
+    return localStorage.getItem('ialy_report_doc_year') || '2026';
+  });
+
+  const handleUpdateDocDate = (type: 'day' | 'month' | 'year', val: string) => {
+    if (type === 'day') {
+      setDocDay(val);
+      try {
+        localStorage.setItem('ialy_report_doc_day', val);
+      } catch (e) {}
+    } else if (type === 'month') {
+      setDocMonth(val);
+      try {
+        localStorage.setItem('ialy_report_doc_month', val);
+      } catch (e) {}
+    } else if (type === 'year') {
+      setDocYear(val);
+      try {
+        localStorage.setItem('ialy_report_doc_year', val);
+      } catch (e) {}
+    }
+  };
+
+  const handleSetToday = () => {
+    const today = new Date();
+    const d = today.getDate().toString();
+    const m = (today.getMonth() + 1).toString();
+    const y = today.getFullYear().toString();
+    setDocDay(d);
+    setDocMonth(m);
+    setDocYear(y);
+    try {
+      localStorage.setItem('ialy_report_doc_day', d);
+      localStorage.setItem('ialy_report_doc_month', m);
+      localStorage.setItem('ialy_report_doc_year', y);
+    } catch (e) {}
+  };
+
+  const formattedDocDate = useMemo(() => {
+    const dTrim = docDay.trim();
+    const mTrim = docMonth.trim();
+    const yTrim = docYear.trim();
+    const dText = dTrim ? (dTrim.length === 1 ? '0' + dTrim : dTrim) : '.....';
+    const mText = mTrim ? (mTrim.length === 1 ? '0' + mTrim : mTrim) : '.....';
+    const yText = yTrim || '202...';
+    return `Gia Lai, ngày ${dText} tháng ${mText} năm ${yText}`;
+  }, [docDay, docMonth, docYear]);
+
+  // Modal danh sách gợi ý nội dung kiến nghị
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false);
+  const [suggestionInsertedId, setSuggestionInsertedId] = useState<string | null>(null);
+
+  const handleInsertSuggestion = (content: string, id: string) => {
+    setRecommendations((prev) => {
+      if (prev.includes(content)) return prev;
+      const updated = [...prev, content];
+      try {
+        localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    setSuggestionInsertedId(id);
+    setTimeout(() => setSuggestionInsertedId(null), 2500);
+  };
+
+  const handleApplyAllDefaultSuggestions = () => {
+    setRecommendations(DEFAULT_RECOMMENDATIONS);
+    try {
+      localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(DEFAULT_RECOMMENDATIONS));
+    } catch (e) {}
+    setShowSuggestionsModal(false);
+  };
 
   // Lọc chính xác danh sách hồ sơ thuộc kỳ báo cáo Tháng / Năm đang chọn
   const activePeriodRecords = useMemo(() => {
@@ -264,6 +362,124 @@ export const ReportView: React.FC<ReportViewProps> = ({
     } catch (e) {}
   };
 
+  // Quản lý trạng thái chèn chữ ký cho từng thành viên và Trưởng nhóm
+  const [signedMembers, setSignedMembers] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('ialy_signed_members_map');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    const initial: Record<string, boolean> = {};
+    DEFAULT_MEMBERS.forEach((m) => {
+      initial[m] = true;
+    });
+    return initial;
+  });
+
+  const [isLeaderSigned, setIsLeaderSigned] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('ialy_leader_signed');
+      if (saved !== null) return JSON.parse(saved);
+    } catch (e) {}
+    return true;
+  });
+
+  const handleToggleMemberSign = (name: string) => {
+    setSignedMembers((prev) => {
+      const updated = { ...prev, [name]: prev[name] === false ? true : false };
+      try {
+        localStorage.setItem('ialy_signed_members_map', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleToggleLeaderSign = () => {
+    setIsLeaderSigned((prev) => {
+      const updated = !prev;
+      try {
+        localStorage.setItem('ialy_leader_signed', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Modal Quản lý & Cắt / Vẽ chữ ký
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [sigModalTarget, setSigModalTarget] = useState<string | null>(null);
+  const [, setSigVersion] = useState(0);
+
+  const handleOpenSignatureModal = (targetName?: string) => {
+    setSigModalTarget(targetName || null);
+    setShowSignatureModal(true);
+  };
+
+  const handleSignatureUpdated = (personName: string) => {
+    setSigVersion((v) => v + 1);
+    if (personName.toLowerCase().includes('chương')) {
+      setIsLeaderSigned(true);
+      try {
+        localStorage.setItem('ialy_leader_signed', JSON.stringify(true));
+      } catch (e) {}
+    } else {
+      setSignedMembers((prev) => {
+        const updated = { ...prev, [personName]: true };
+        try {
+          localStorage.setItem('ialy_signed_members_map', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+  };
+
+  const handleSelectAllMembers = (selected: boolean) => {
+    setSignedMembers((prev) => {
+      const updated = { ...prev };
+      auditMembers.forEach((m) => {
+        updated[m] = selected;
+      });
+      try {
+        localStorage.setItem('ialy_signed_members_map', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // Xử lý tải ảnh chữ ký cá nhân lên
+  const handleUploadMemberSignature = (name: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        await saveCustomMemberSignature(name, dataUrl);
+        setSigVersion((v) => v + 1);
+        setSignedMembers((prev) => ({ ...prev, [name]: true }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Xử lý tải ảnh chữ ký Trưởng nhóm
+  const handleUploadLeaderSignature = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        await saveCustomMemberSignature('Trần Thanh Chương', dataUrl);
+        setSigVersion((v) => v + 1);
+        setIsLeaderSigned(true);
+        try {
+          localStorage.setItem('ialy_leader_signed', JSON.stringify(true));
+        } catch (err) {}
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetLeaderSignature = () => {
+    resetCustomMemberSignature('Trần Thanh Chương');
+    setSigVersion((v) => v + 1);
+  };
+
   // Modal xem chi tiết danh sách phiếu/lệnh lỗi khi nhấp vào cột biểu đồ
   const [drilldownType, setDrilldownType] = useState<'PCT' | 'LCT' | 'ALL' | null>(null);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
@@ -279,7 +495,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
       ),
     [pctList]
   );
-  const pctErrorRate = pctList.length > 0 ? ((pctErrorList.length / pctList.length) * 100).toFixed(1) : '0.0';
+  // Phần trăm không lấy số sau dấu phẩy (ví dụ 49% không hiện 00)
+  const pctErrorRate = pctList.length > 0 ? Math.round((pctErrorList.length / pctList.length) * 100) : 0;
 
   // 2. Phân loại danh sách Lệnh công tác (LCT)
   const lctList = useMemo(() => activePeriodRecords.filter((r) => r.documentType === 'LCT'), [activePeriodRecords]);
@@ -290,7 +507,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       ),
     [lctList]
   );
-  const lctErrorRate = lctList.length > 0 ? ((lctErrorList.length / lctList.length) * 100).toFixed(1) : '0.0';
+  const lctErrorRate = lctList.length > 0 ? Math.round((lctErrorList.length / lctList.length) * 100) : 0;
 
   // 3. Tổng hợp Phiếu + Lệnh công tác
   const totalDocsList = activePeriodRecords;
@@ -301,7 +518,51 @@ export const ReportView: React.FC<ReportViewProps> = ({
       ),
     [totalDocsList]
   );
-  const totalErrorRate = totalDocsList.length > 0 ? ((totalErrorList.length / totalDocsList.length) * 100).toFixed(1) : '0.0';
+  const totalErrorRate = totalDocsList.length > 0 ? Math.round((totalErrorList.length / totalDocsList.length) * 100) : 0;
+
+  // 4. Thống kê số người và tỷ lệ vi phạm của Phân xưởng Vận hành (PXVH) và Phân xưởng Sửa chữa (PXSC)
+  const { vhPersonsSet, scPersonsSet, vhViolationCount, scViolationCount, vhDocsCount, scDocsCount, vhPercentage, scPercentage } = useMemo(() => {
+    const allViols = [...pctViolations, ...lctViolations];
+    const vhSet = new Set<string>();
+    const scSet = new Set<string>();
+    let vhCount = 0;
+    let scCount = 0;
+
+    allViols.forEach((v) => {
+      if (v.vhialyPerson && v.vhialyPerson !== '/' && !v.vhialyPerson.toLowerCase().includes('chưa rõ')) {
+        vhSet.add(v.vhialyPerson);
+        vhCount++;
+      }
+      if (v.pxscPerson && v.pxscPerson !== '/' && !v.pxscPerson.toLowerCase().includes('chưa rõ')) {
+        scSet.add(v.pxscPerson);
+        scCount++;
+      }
+    });
+
+    const vhDocs = new Set<string>();
+    const scDocs = new Set<string>();
+    activePeriodRecords.forEach((r) => {
+      if (r.result === 'Có sai sót' || r.errorCount > 0 || r.parsedErrors.length > 0) {
+        if (r.issuer || r.approver) vhDocs.add(r.id);
+        if (r.leader || r.workers) scDocs.add(r.id);
+      }
+    });
+
+    const totalWorkshopViols = Math.max(vhCount + scCount, 1);
+    const vhPct = Math.round((vhCount / totalWorkshopViols) * 100);
+    const scPct = 100 - vhPct;
+
+    return {
+      vhPersonsSet: vhSet,
+      scPersonsSet: scSet,
+      vhViolationCount: vhCount,
+      scViolationCount: scCount,
+      vhDocsCount: vhDocs.size,
+      scDocsCount: scDocs.size,
+      vhPercentage: vhPct,
+      scPercentage: scPct,
+    };
+  }, [pctViolations, lctViolations, activePeriodRecords]);
 
   // Danh sách hiển thị trong Modal Drilldown
   const activeModalRecords = useMemo(() => {
@@ -334,6 +595,9 @@ export const ReportView: React.FC<ReportViewProps> = ({
       reportYear,
       recommendationsText: recommendations.filter((r) => r.trim()).join('\n'),
       auditMembers,
+      documentDate: formattedDocDate,
+      signedMembers,
+      isLeaderSigned,
     });
   };
 
@@ -485,33 +749,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Huy hiệu vai trò */}
-          {isAdmin ? (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span>Admin (Được chỉnh sửa)</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <div className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium">
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Khách (Chỉ xem)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAdminModal(true)}
-                title="Đăng nhập tài khoản Quản trị viên để chỉnh sửa nội dung báo cáo"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold transition cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5 text-blue-600" />
-                <span>Mở quyền sửa</span>
-              </button>
-            </div>
-          )}
-
-          <div className="h-4 w-px bg-slate-200 hidden sm:block mx-1" />
-
+        <div className="flex items-center gap-2">
           <button
             onClick={handleExportWord}
             title="Xuất văn bản Word (.doc)"
@@ -536,26 +774,64 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* Formal Corporate Header */}
         <div className="flex justify-between items-start pb-4 mb-6">
           <div className="text-center w-[40%]">
-            <p className="text-xs sm:text-sm font-bold uppercase text-slate-800 print:text-black whitespace-nowrap print:text-[11.5pt]">
+            <p className="font-bold uppercase text-slate-800 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               CÔNG TY THỦY ĐIỆN IALY
             </p>
-            <p className="text-xs sm:text-sm font-bold uppercase text-slate-900 print:text-black whitespace-nowrap print:text-[11.5pt]">
+            <p className="font-bold uppercase text-slate-900 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               PX VẬN HÀNH IALY
             </p>
             <div className="w-24 sm:w-28 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
           </div>
 
           <div className="text-center w-[60%]">
-            <p className="text-xs sm:text-sm font-bold uppercase text-slate-800 print:text-black whitespace-nowrap print:text-[11pt]">
+            <p className="font-bold uppercase text-slate-800 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
             </p>
-            <p className="text-xs sm:text-sm font-bold text-slate-800 print:text-black whitespace-nowrap print:text-[11.5pt]">
+            <p className="font-bold text-slate-800 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               Độc lập - Tự do - Hạnh phúc
             </p>
-            <div className="w-32 sm:w-36 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
-            <p className="text-[11px] sm:text-xs text-slate-600 print:text-black italic mt-1.5 whitespace-nowrap">
-              Gia Lai, ngày ..... tháng ..... năm 202...
-            </p>
+            <div className="w-28 sm:w-36 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
+            {/* Dòng ngày tháng: Cỡ chữ 13pt theo quy định */}
+            <div className="mt-1.5 flex items-center justify-center gap-1 text-xs sm:text-[13pt] print:text-[13pt] text-slate-700 print:text-black italic">
+              <span>Gia Lai, ngày</span>
+              <input
+                type="text"
+                value={docDay}
+                onChange={(e) => handleUpdateDocDate('day', e.target.value)}
+                placeholder="..."
+                maxLength={2}
+                title="Nhập ngày lập báo cáo (ví dụ: 15)"
+                className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+              />
+              <span>tháng</span>
+              <input
+                type="text"
+                value={docMonth}
+                onChange={(e) => handleUpdateDocDate('month', e.target.value)}
+                placeholder="..."
+                maxLength={2}
+                title="Nhập tháng lập báo cáo (ví dụ: 09)"
+                className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+              />
+              <span>năm</span>
+              <input
+                type="text"
+                value={docYear}
+                onChange={(e) => handleUpdateDocDate('year', e.target.value)}
+                placeholder="202..."
+                maxLength={4}
+                title="Nhập năm lập báo cáo (ví dụ: 2026)"
+                className="w-14 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+              />
+              <button
+                type="button"
+                onClick={handleSetToday}
+                title="Điền nhanh ngày hôm nay"
+                className="ml-1 px-1.5 py-0.5 text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition cursor-pointer not-italic print:hidden font-medium"
+              >
+                Hôm nay
+              </button>
+            </div>
           </div>
         </div>
 
@@ -579,13 +855,16 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </h3>
           </div>
 
-          {/* Bảng danh sách chi tiết các phiếu công tác có nội dung không phù hợp */}
+          {/* Bảng danh sách chi tiết các phiếu công tác có nội dung không phù hợp (Có STT và Ghi chú) */}
           <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
             <table className="w-full text-xs">
               <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
                 <tr>
-                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-14">
-                    Số
+                  <th rowSpan={2} className="py-2.5 px-2 text-center border-r border-slate-300 print:border-black w-10">
+                    STT
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
+                    Số phiếu
                   </th>
                   <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
                     Loại
@@ -593,11 +872,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <th rowSpan={2} className="py-2.5 px-4 text-left border-r border-slate-300 print:border-black">
                     Nội dung không phù hợp
                   </th>
-                  <th colSpan={2} className="py-1 px-3 text-center border-b border-r border-slate-300 print:border-black w-48">
+                  <th colSpan={2} className="py-1 px-3 text-center border-b border-slate-300 print:border-black w-48">
                     Người liên quan
                   </th>
-                  <th rowSpan={2} className="py-2.5 px-4 text-left w-48">
-                    Lý do không phù hợp
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-slate-300 print:border-black w-24">
+                    Ghi chú
                   </th>
                 </tr>
                 <tr>
@@ -611,8 +890,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-200 print:divide-black">
                 {pctViolations.length > 0 ? (
-                  pctViolations.map((v) => (
-                    <tr key={v.id} className="hover:bg-slate-50 print:bg-transparent">
+                  pctViolations.map((v, idx) => (
+                    <tr key={v.id || idx} className="hover:bg-slate-50 print:bg-transparent">
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {idx + 1}
+                      </td>
                       <td className="py-2 px-3 text-center font-bold border-r border-slate-200 print:border-black print:text-black">
                         {v.docNumber}
                       </td>
@@ -628,64 +910,18 @@ export const ReportView: React.FC<ReportViewProps> = ({
                       <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
                         {v.pxscPerson}
                       </td>
-                      <td className="py-2 px-4 print:border-black print:text-black text-slate-700 leading-relaxed">
-                        {v.reason}
+                      <td className="py-2 px-2 text-center print:border-black print:text-black text-slate-600">
+                        {v.note || ''}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-4 text-center italic text-slate-500 print:text-black">
+                    <td colSpan={7} className="py-4 text-center italic text-slate-500 print:text-black">
                       Không phát hiện nội dung không phù hợp trong kỳ kiểm tra.
                     </td>
                   </tr>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Tiêu đề phân cách rõ ràng để 2 bảng không bị dính sát nhau */}
-          <div className="mt-8 mb-3">
-            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black">
-              * Tổng hợp số liệu Phiếu công tác (PCT):
-            </h4>
-          </div>
-
-          {/* Bảng tổng hợp số liệu PCT */}
-          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-6">
-            <table className="w-full text-xs text-center">
-              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
-                <tr>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT đã cấp số</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT không thực hiện</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT giấy</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT đang thực hiện</th>
-                  <th className="py-2 px-3 print:border-black">PCT không phù hợp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 print:divide-black">
-                <tr>
-                  <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {activePeriodOverview.totalPCT}
-                  </td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {activePeriodOverview.pctValid}
-                  </td>
-                  <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
-                    {activePeriodOverview.pctWithErrors}
-                  </td>
-                </tr>
-                <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">100%</td>
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">
-                    {activePeriodOverview.totalPCT > 0 ? (100 - Number(activePeriodOverview.pctErrorRate)).toFixed(2) : '100'}%
-                  </td>
-                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{activePeriodOverview.pctErrorRate}%</td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -701,13 +937,16 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </h3>
           </div>
 
-          {/* Bảng danh sách chi tiết các lệnh công tác có nội dung không phù hợp */}
+          {/* Bảng danh sách chi tiết các lệnh công tác có nội dung không phù hợp (Có STT và Ghi chú) */}
           <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
             <table className="w-full text-xs">
               <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
                 <tr>
-                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-14">
-                    Số
+                  <th rowSpan={2} className="py-2.5 px-2 text-center border-r border-slate-300 print:border-black w-10">
+                    STT
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
+                    Số lệnh
                   </th>
                   <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
                     Loại
@@ -715,11 +954,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <th rowSpan={2} className="py-2.5 px-4 text-left border-r border-slate-300 print:border-black">
                     Nội dung không phù hợp
                   </th>
-                  <th colSpan={2} className="py-1 px-3 text-center border-b border-r border-slate-300 print:border-black w-48">
+                  <th colSpan={2} className="py-1 px-3 text-center border-b border-slate-300 print:border-black w-48">
                     Người liên quan
                   </th>
-                  <th rowSpan={2} className="py-2.5 px-4 text-left w-48">
-                    Lý do không phù hợp
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-slate-300 print:border-black w-24">
+                    Ghi chú
                   </th>
                 </tr>
                 <tr>
@@ -733,8 +972,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-200 print:divide-black">
                 {lctViolations.length > 0 ? (
-                  lctViolations.map((v) => (
-                    <tr key={v.id} className="hover:bg-slate-50 print:bg-transparent">
+                  lctViolations.map((v, idx) => (
+                    <tr key={v.id || idx} className="hover:bg-slate-50 print:bg-transparent">
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {idx + 1}
+                      </td>
                       <td className="py-2 px-3 text-center font-bold border-r border-slate-200 print:border-black print:text-black">
                         {v.docNumber}
                       </td>
@@ -750,14 +992,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
                       <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
                         {v.pxscPerson}
                       </td>
-                      <td className="py-2 px-4 print:border-black print:text-black text-slate-700 leading-relaxed">
-                        {v.reason}
+                      <td className="py-2 px-2 text-center print:border-black print:text-black text-slate-600">
+                        {v.note || ''}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-4 text-center italic text-slate-500 print:text-black">
+                    <td colSpan={7} className="py-4 text-center italic text-slate-500 print:text-black">
                       Không phát hiện nội dung không phù hợp trong kỳ kiểm tra.
                     </td>
                   </tr>
@@ -765,44 +1007,239 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </tbody>
             </table>
           </div>
+        </div>
 
-          {/* Tiêu đề phân cách rõ ràng để 2 bảng không bị dính sát nhau */}
-          <div className="mt-8 mb-3">
-            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black">
-              * Tổng hợp số liệu Lệnh công tác (LCT):
+        {/* ========================================================================= */}
+        {/* BIỂU ĐỒ CỘT SO SÁNH SỐ LIỆU THỰC HIỆN PCT VÀ LCT (Thay thế 2 bảng tổng hợp cũ) */}
+        {/* ========================================================================= */}
+        <div className="mb-8 pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5">
+              <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
+              <span>* Tổng hợp so sánh số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</span>
             </h4>
           </div>
 
-          {/* Bảng tổng hợp số liệu LCT */}
-          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-6">
-            <table className="w-full text-xs text-center">
-              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
-                <tr>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">Tổng LCT được cấp số</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">LCT không thực hiện</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">LCT giấy</th>
-                  <th className="py-2 px-3 print:border-black">LCT không phù hợp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 print:divide-black">
-                <tr>
-                  <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {activePeriodOverview.totalLCT}
-                  </td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
-                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
-                  <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
-                    {activePeriodOverview.lctWithErrors}
-                  </td>
-                </tr>
-                <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">100%</td>
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
-                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
-                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{activePeriodOverview.lctErrorRate}%</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* Thẻ biểu đồ cột PCT */}
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 print:bg-transparent print:border-slate-300">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                  Phiếu công tác (PCT)
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold">
+                  Tỷ lệ lỗi: {pctErrorRate}%
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                  <div className="text-[10px] text-slate-500">Tổng cấp</div>
+                  <div className="text-base font-black text-slate-900 font-mono">{activePeriodOverview.totalPCT}</div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                  <div className="text-[10px] text-emerald-600">Hợp lệ</div>
+                  <div className="text-base font-black text-emerald-600 font-mono">{activePeriodOverview.pctValid}</div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                  <div className="text-[10px] text-rose-600">Có lỗi</div>
+                  <div className="text-base font-black text-rose-600 font-mono">{activePeriodOverview.pctWithErrors}</div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
+                  <span>Tiến độ hợp lệ</span>
+                  <span>{100 - Number(pctErrorRate)}%</span>
+                </div>
+                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${activePeriodOverview.totalPCT > 0 ? (activePeriodOverview.pctValid / activePeriodOverview.totalPCT) * 100 : 100}%` }}
+                    className="bg-emerald-500 h-full"
+                    title="Hợp lệ"
+                  ></div>
+                  <div
+                    style={{ width: `${Number(pctErrorRate)}%` }}
+                    className="bg-rose-500 h-full"
+                    title="Có lỗi"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Thẻ biểu đồ cột LCT */}
+            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 print:bg-transparent print:border-slate-300">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">
+                  Lệnh công tác (LCT)
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                  Tỷ lệ lỗi: {lctErrorRate}%
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                  <div className="text-[10px] text-slate-500">Tổng cấp</div>
+                  <div className="text-base font-black text-slate-900 font-mono">{activePeriodOverview.totalLCT}</div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                  <div className="text-[10px] text-emerald-600">Hợp lệ</div>
+                  <div className="text-base font-black text-emerald-600 font-mono">{activePeriodOverview.lctValid}</div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                  <div className="text-[10px] text-rose-600">Có lỗi</div>
+                  <div className="text-base font-black text-rose-600 font-mono">{activePeriodOverview.lctWithErrors}</div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
+                  <span>Tiến độ hợp lệ</span>
+                  <span>{100 - Number(lctErrorRate)}%</span>
+                </div>
+                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${activePeriodOverview.totalLCT > 0 ? (activePeriodOverview.lctValid / activePeriodOverview.totalLCT) * 100 : 100}%` }}
+                    className="bg-emerald-500 h-full"
+                    title="Hợp lệ"
+                  ></div>
+                  <div
+                    style={{ width: `${Number(lctErrorRate)}%` }}
+                    className="bg-rose-500 h-full"
+                    title="Có lỗi"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* BIỂU ĐỒ SO SÁNH SỐ NGƯỜI VÀ VI PHẠM THEO PHÂN XƯỞNG (PXVH vs PXSC) */}
+        {/* ========================================================================= */}
+        <div className="mb-8 pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5 print:text-[13pt]">
+              <Users className="w-4 h-4 text-blue-600 print:hidden" />
+              <span>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</span>
+            </h4>
+          </div>
+
+          {/* Hai thẻ đối sánh trực quan 2 phân xưởng PXVH và PXSC */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+            {/* Phân xưởng Vận hành (PXVH) */}
+            <div className="p-4 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-blue-100/30 print:bg-transparent print:border-black shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                  Phân xưởng Vận hành (PXVH)
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-xs font-black shadow-xs">
+                  {vhPercentage}%
+                </span>
+              </div>
+
+              {/* Thanh tỷ lệ vi phạm PXVH */}
+              <div className="w-full bg-blue-200/70 h-2.5 rounded-full overflow-hidden mb-3.5">
+                <div
+                  style={{ width: `${vhPercentage}%` }}
+                  className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                ></div>
+              </div>
+
+              {/* 3 chỉ số then chốt */}
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-slate-500">Nhân sự vi phạm</div>
+                  <div className="text-base font-black text-blue-950 font-mono mt-0.5">
+                    {vhPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-slate-500">Phiếu/lệnh vi phạm</div>
+                  <div className="text-base font-black text-blue-950 font-mono mt-0.5">
+                    {vhDocsCount}
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-rose-600 font-medium">Tổng số lỗi</div>
+                  <div className="text-base font-black text-rose-600 font-mono mt-0.5">
+                    {vhViolationCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Phân xưởng Sửa chữa (PXSC) */}
+            <div className="p-4 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-amber-100/30 print:bg-transparent print:border-black shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                  Phân xưởng Sửa chữa (PXSC)
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-xs font-black shadow-xs">
+                  {scPercentage}%
+                </span>
+              </div>
+
+              {/* Thanh tỷ lệ vi phạm PXSC */}
+              <div className="w-full bg-amber-200/70 h-2.5 rounded-full overflow-hidden mb-3.5">
+                <div
+                  style={{ width: `${scPercentage}%` }}
+                  className="bg-amber-600 h-full rounded-full transition-all duration-500"
+                ></div>
+              </div>
+
+              {/* 3 chỉ số then chốt */}
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-slate-500">Nhân sự vi phạm</div>
+                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">
+                    {scPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-slate-500">Phiếu/lệnh vi phạm</div>
+                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">
+                    {scDocsCount}
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
+                  <div className="text-[10px] text-rose-600 font-medium">Tổng số lỗi</div>
+                  <div className="text-base font-black text-rose-600 font-mono mt-0.5">
+                    {scViolationCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Thanh tương quan tỷ lệ vi phạm toàn phân xưởng */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-6 print:border-black print:bg-transparent">
+            <div className="flex items-center justify-between text-xs font-bold mb-2 text-slate-700">
+              <span className="flex items-center gap-1.5 text-blue-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                PXVH: {vhPercentage}% ({vhViolationCount} lỗi)
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Tương quan phân bổ vi phạm (100%)
+              </span>
+              <span className="flex items-center gap-1.5 text-amber-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                PXSC: {scPercentage}% ({scViolationCount} lỗi)
+              </span>
+            </div>
+            <div className="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
+              <div
+                style={{ width: `${vhPercentage}%` }}
+                className="bg-blue-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
+              >
+                {vhPercentage > 10 && `PXVH ${vhPercentage}%`}
+              </div>
+              <div
+                style={{ width: `${scPercentage}%` }}
+                className="bg-amber-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
+              >
+                {scPercentage > 10 && `PXSC ${scPercentage}%`}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -811,7 +1248,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
-              <span><b>Biểu đồ tỷ lệ vi phạm trực quan:</b></span>
+              <span><b>Tỷ lệ vi phạm:</b></span>
             </h3>
             <span className="text-[11px] text-slate-500 italic print:hidden">
               (Nhấp vào từng cột để mở danh sách chi tiết các phiếu, lệnh vi phạm)
@@ -980,7 +1417,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     </div>
                   </div>
                   <div className="mt-2 text-center text-xs text-slate-700 print:text-black font-medium">
-                    <strong className="text-rose-600 print:text-black font-bold">{totalErrorList.length}</strong> / {totalDocsList.length} hồ sơ có lỗi
+                    <strong className="text-rose-600 print:text-black font-bold">{totalErrorList.length}</strong> / {totalDocsList.length} phiếu/lệnh có lỗi
                   </div>
                 </div>
               </div>
@@ -1021,6 +1458,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
                   type="button"
+                  onClick={() => setShowSuggestionsModal(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer font-bold shadow-2xs"
+                  title="Mở danh sách gợi ý nội dung kiến nghị chuẩn từ Phân xưởng"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Danh sách gợi ý ({SUGGESTED_RECOMMENDATIONS_LIST.length})</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleSmartGenerateRecommendations}
                   className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer font-bold shadow-2xs"
                   title="Tự động tính toán số liệu và sinh ra các ý đánh giá & kiến nghị thực tế"
@@ -1048,6 +1494,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             ) : (
               <div className="flex items-center gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSuggestionsModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer"
+                  title="Xem danh sách các gợi ý nội dung kiến nghị từ Phân xưởng"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Xem gợi ý mẫu ({SUGGESTED_RECOMMENDATIONS_LIST.length})</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowAdminModal(true)}
@@ -1136,26 +1591,69 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* ========================================================================= */}
         {/* CÁC THÀNH VIÊN THAM GIA HẬU KIỂM (Có thể thêm hoặc xóa linh hoạt) */}
         {/* ========================================================================= */}
+        {/* ========================================================================= */}
+        {/* CÁC THÀNH VIÊN THAM GIA HẬU KIỂM (Có thể thêm hoặc xóa linh hoạt & chèn chữ ký) */}
+        {/* ========================================================================= */}
         <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-2 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h4 className="font-bold text-xs sm:text-sm print:text-[13pt] text-slate-900 print:text-black">
-              <b>Các thành viên tham gia hậu kiểm:</b>
-              <span className="text-[11px] text-slate-500 font-normal italic ml-2 print:hidden">
-                ({auditMembers.length} thành viên)
-              </span>
-            </h4>
+          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
+            <div>
+              <h4 className="font-bold text-xs sm:text-sm print:text-[13pt] text-slate-900 print:text-black">
+                <b>Các thành viên tham gia hậu kiểm:</b>
+                <span className="text-[11px] text-slate-500 font-normal italic ml-2 print:hidden">
+                  ({auditMembers.length} thành viên)
+                </span>
+              </h4>
+              <p className="text-[11px] text-blue-700 font-medium print:hidden mt-0.5">
+                Tích chọn người nào để tự động chèn chữ ký của người đó vào văn bản
+              </p>
+            </div>
 
-            {isAdmin && (
+            {/* Các nút công cụ chữ ký trên Web */}
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSignatureModal()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition cursor-pointer"
+                  title="Tải ảnh chữ ký chung của tổ để cắt hoặc tải ảnh riêng cho từng người"
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>Quản lý & Tải ảnh chữ ký</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={handleResetMembers}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium print:hidden"
-                title="Khôi phục danh sách thành viên mặc định"
+                onClick={() => handleSelectAllMembers(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                title="Tích chọn chèn chữ ký cho tất cả các thành viên"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span>Khôi phục danh sách chuẩn</span>
+                <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Chọn tất cả</span>
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={() => handleSelectAllMembers(false)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                title="Bỏ chọn toàn bộ chữ ký thành viên"
+              >
+                <Square className="w-3.5 h-3.5 text-slate-400" />
+                <span>Bỏ chọn</span>
+              </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleResetMembers}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium"
+                  title="Khôi phục danh sách thành viên mặc định"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Danh sách chuẩn</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Thanh thêm thành viên mới (Chỉ dành cho Admin trên giao diện Web) */}
@@ -1188,82 +1686,247 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </div>
           )}
 
-          {/* Danh sách thành viên hiển thị trên Web */}
-          {isAdmin ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
-              {auditMembers.map((name, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between py-1.5 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition group"
-                >
-                  <span className="font-medium text-slate-800">
-                    <span className="text-slate-400 font-bold mr-1.5">{idx + 1}.</span>
-                    {name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteMember(idx)}
-                    className="opacity-60 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
-                    title={`Xóa ${name}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
-              {auditMembers.map((name, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center py-2 px-3 bg-slate-50 rounded-lg border border-slate-200 font-medium"
-                >
-                  <span className="text-slate-400 font-bold mr-2">{idx + 1}.</span>
-                  <span className="text-slate-800">{name}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Danh sách thành viên hiển thị trên Web (Có checkbox tích chọn tự động chèn chữ ký & nút tải ảnh) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-800 print:hidden mb-4">
+            {auditMembers.map((name, idx) => {
+              const isSigned = signedMembers[name] !== false;
 
-          {/* Bản in chuẩn 2 cột dạng văn bản hành chính không có nút xóa */}
-          <div className="hidden print:grid grid-cols-2 gap-x-8 gap-y-1 text-[13pt] text-black">
+              return (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border transition-all ${
+                    isSigned
+                      ? 'bg-blue-50/50 border-blue-200 shadow-2xs'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isSigned}
+                        onChange={() => handleToggleMemberSign(name)}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="font-bold text-slate-800 text-xs sm:text-sm">
+                        <span className="text-slate-400 mr-1">{idx + 1}.</span>
+                        {name}
+                      </span>
+                    </label>
+
+                    {/* Chỉ quyền admin mới được tải ảnh, ký tay, sửa, xóa thành viên */}
+                    {isAdmin && (
+                      <div className="flex items-center gap-1.5">
+                        {/* Nút tải ảnh chữ ký thật từ máy */}
+                        <label
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 shadow-2xs transition cursor-pointer"
+                          title={`Tải file ảnh chữ ký thực tế cho ${name}`}
+                        >
+                          <Upload className="w-3 h-3 text-blue-600" />
+                          <span>Tải ảnh</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadMemberSignature(name, file);
+                            }}
+                          />
+                        </label>
+
+                        {/* Nút Ký tay / Mở modal */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSignatureModal(name)}
+                          className="p-1 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 transition cursor-pointer"
+                          title={`Ký tay hoặc cắt chữ ký cho ${name}`}
+                        >
+                          <PenTool className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Xóa thành viên (Admin) */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMember(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                          title={`Xóa ${name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Vùng hiển thị chữ ký khi được tích chọn (Bỏ Đã chèn chữ ký, Ảnh riêng, thay bằng icon nhỏ) */}
+                  {isSigned ? (
+                    <div className="mt-1 pt-1.5 border-t border-blue-100/80 flex items-center justify-between">
+                      <div
+                        className="h-11 flex items-center max-w-[155px]"
+                        dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg(name) }}
+                      />
+                      <div className="flex items-center gap-1 text-emerald-600 print:hidden" title="Chữ ký đã sẵn sàng">
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 pt-1 border-t border-slate-200/60 text-[11px] text-slate-400 italic flex items-center justify-between">
+                      <span>Chưa chèn chữ ký</span>
+                      <span className="text-slate-300 text-xs">—</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bản in chuẩn 2 cột dạng văn bản hành chính (Tự động hiển thị chữ ký các thành viên được tích) */}
+          <div className="hidden print:grid grid-cols-2 gap-x-8 gap-y-3 text-[13pt] text-black">
             <div>
-              {auditMembers.slice(0, Math.ceil(auditMembers.length / 2)).map((name, idx) => (
-                <p key={idx} className="mb-0.5">
-                  {idx + 1}. {name}
-                </p>
-              ))}
+              {auditMembers.slice(0, Math.ceil(auditMembers.length / 2)).map((name, idx) => {
+                const isSigned = signedMembers[name] !== false;
+                return (
+                  <div key={idx} className="mb-2">
+                    <p className="font-medium">
+                      {idx + 1}. {name}
+                    </p>
+                    {isSigned && (
+                      <div
+                        className="h-10 my-0.5 ml-4"
+                        dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg(name) }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div>
               {auditMembers.slice(Math.ceil(auditMembers.length / 2)).map((name, idx) => {
                 const actualIndex = Math.ceil(auditMembers.length / 2) + idx + 1;
+                const isSigned = signedMembers[name] !== false;
                 return (
-                  <p key={idx} className="mb-0.5">
-                    {actualIndex}. {name}
-                  </p>
+                  <div key={idx} className="mb-2">
+                    <p className="font-medium">
+                      {actualIndex}. {name}
+                    </p>
+                    {isSigned && (
+                      <div
+                        className="h-10 my-0.5 ml-4"
+                        dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg(name) }}
+                      />
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
         </div>
 
-        {/* Formal Corporate Signatures */}
+        {/* ========================================================================= */}
+        {/* NƠI NHẬN (CỠ CHỮ 12 CHO 'Nơi nhận:', CỠ CHỮ 11 CHO DANH SÁCH) & TRƯỞNG NHÓM */}
+        {/* ========================================================================= */}
         <div className="flex justify-between items-start pt-6 text-xs sm:text-sm">
-          <div className="w-48 text-left text-xs sm:text-[11pt]">
-            <p className="font-bold italic text-slate-800 print:text-black">Nơi nhận:</p>
-            <p className="text-slate-600 print:text-black">- LĐPX (để b/c);</p>
-            <p className="text-slate-600 print:text-black">- PXSC (để biết);</p>
-            <p className="text-slate-600 print:text-black">- Lưu ATV.</p>
+          {/* Nơi nhận chuẩn quy cách */}
+          <div className="w-52 text-left">
+            <p className="font-bold italic text-slate-800 print:text-black text-[12pt] mb-1">
+              Nơi nhận:
+            </p>
+            <p className="text-slate-600 print:text-black text-[11pt] leading-snug">
+              - LĐPX (để b/c);
+            </p>
+            <p className="text-slate-600 print:text-black text-[11pt] leading-snug">
+              - PXSC (để biết);
+            </p>
+            <p className="text-slate-600 print:text-black text-[11pt] leading-snug">
+              - Lưu ATV.
+            </p>
           </div>
-          <div className="w-56 text-center">
-            <p className="font-bold uppercase text-slate-900 print:text-black print:text-[12pt]">
+
+          {/* Chữ ký TRƯỞNG NHÓM (Cỡ chữ 13pt) */}
+          <div className="w-64 text-center">
+            <p className="font-bold uppercase text-slate-900 print:text-black text-[13pt]">
               TRƯỞNG NHÓM
             </p>
-            <p className="text-[10px] sm:text-xs text-slate-400 print:text-black italic mt-0.5">
+            <p className="text-[11pt] text-slate-500 print:text-black italic mt-0.5">
               (Ký, ghi rõ họ tên)
             </p>
-            <div className="h-16"></div>
-            <p className="font-bold text-slate-900 print:text-black text-xs sm:text-[13pt]">
+
+            {/* Bảng điều khiển chức năng chữ ký Trưởng nhóm trên Web */}
+            <div className="print:hidden my-2 p-2 bg-amber-50/80 border border-amber-200/90 rounded-xl flex flex-col gap-1.5 shadow-2xs">
+              <label className="flex items-center justify-center gap-2 text-xs font-bold text-amber-950 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isLeaderSigned}
+                  onChange={handleToggleLeaderSign}
+                  className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
+                />
+                <span>Tự động chèn chữ ký Trưởng nhóm</span>
+              </label>
+
+              {/* Chỉ quyền Admin mới được tải ảnh hoặc ký tay Trưởng nhóm */}
+              {isAdmin && (
+                <div className="flex items-center justify-center gap-1.5 pt-1 border-t border-amber-200/60">
+                  {/* Nút tải ảnh chữ ký thật từ máy */}
+                  <label
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 shadow-2xs transition cursor-pointer"
+                    title="Tải ảnh chụp chữ ký thực tế cho Trưởng nhóm"
+                  >
+                    <Upload className="w-3 h-3 text-amber-700" />
+                    <span>Tải ảnh</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadLeaderSignature(file);
+                      }}
+                    />
+                  </label>
+
+                  {/* Nút Ký tay Canvas */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSignatureModal('Trần Thanh Chương')}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 shadow-2xs transition cursor-pointer"
+                    title="Mở bảng ký tay trực tiếp hoặc cắt ảnh cho Trưởng nhóm"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Ký tay / Cắt ảnh</span>
+                  </button>
+
+                  {/* Nút xóa ảnh tải lên quay về mẫu gốc */}
+                  {hasCustomSignature('Trần Thanh Chương') && (
+                    <button
+                      type="button"
+                      onClick={handleResetLeaderSignature}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      title="Khôi phục chữ ký mẫu ban đầu của Trưởng nhóm"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Vùng hiển thị chữ ký Trưởng nhóm (Gọn gàng, sạch sẽ) */}
+            {isLeaderSigned ? (
+              <div className="h-16 flex flex-col items-center justify-center my-1">
+                <div
+                  className="h-12 flex items-center justify-center"
+                  dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg('Trần Thanh Chương') }}
+                />
+              </div>
+            ) : (
+              <div className="h-16 flex items-center justify-center print:h-14">
+                <span className="text-[11pt] text-slate-400 italic print:hidden">
+                  (Chưa chèn chữ ký)
+                </span>
+              </div>
+            )}
+
+            <p className="font-bold text-slate-900 print:text-black text-[13pt]">
               Trần Thanh Chương
             </p>
           </div>
@@ -1303,7 +1966,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     {drilldownType === 'ALL' && 'Danh sách Chi tiết Tất cả Phiếu & Lệnh công tác có vi phạm'}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> hồ sơ vi phạm
+                    Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu/lệnh vi phạm
                   </p>
                 </div>
               </div>
@@ -1335,7 +1998,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               {activeModalRecords.length === 0 ? (
                 <div className="py-12 text-center text-slate-400">
                   <ShieldAlert className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs">Không tìm thấy hồ sơ vi phạm nào phù hợp với từ khóa.</p>
+                  <p className="text-xs">Không tìm thấy phiếu/lệnh vi phạm nào phù hợp với từ khóa.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1497,6 +2160,150 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal Danh sách gợi ý nội dung Đánh giá & Kiến nghị */}
+      {showSuggestionsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Danh sách gợi ý nội dung Kiến nghị ({SUGGESTED_RECOMMENDATIONS_LIST.length} nội dung)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Các ý kiến nghị mẫu chuẩn theo kết luận và chỉ đạo của Phân xưởng
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuggestionsModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Actions Bar */}
+            {isAdmin && (
+              <div className="px-6 py-2.5 bg-indigo-50/60 border-b border-indigo-100 flex items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-indigo-900 font-medium">
+                  Chế độ Quản trị viên: Có thể bấm &ldquo;Chèn vào báo cáo&rdquo; từng ý hoặc áp dụng cả bộ 4 ý gốc.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleApplyAllDefaultSuggestions}
+                  className="px-2.5 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-2xs transition cursor-pointer shrink-0"
+                >
+                  Áp dụng bộ 4 ý chuẩn gốc
+                </button>
+              </div>
+            )}
+
+            {/* Suggestions List */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {SUGGESTED_RECOMMENDATIONS_LIST.map((item, idx) => {
+                const isAlreadyAdded = recommendations.includes(item.content);
+                const isJustInserted = suggestionInsertedId === item.id;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-xl border border-slate-200 hover:border-indigo-300 bg-slate-50/50 hover:bg-white transition space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
+                          {item.category}
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-800">
+                          {idx + 1}. {item.title}
+                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Nút sao chép văn bản */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(item.content);
+                            setSuggestionInsertedId(item.id);
+                            setTimeout(() => setSuggestionInsertedId(null), 2000);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition cursor-pointer"
+                          title="Sao chép nội dung vào bộ nhớ tạm"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Sao chép</span>
+                        </button>
+
+                        {/* Nút chèn vào báo cáo (dành cho Admin) */}
+                        {isAdmin && (
+                          <>
+                            {isJustInserted ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-lg animate-in fade-in">
+                                <Check className="w-3 h-3" />
+                                <span>Đã chèn!</span>
+                              </span>
+                            ) : isAlreadyAdded ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                <Check className="w-3 h-3" />
+                                <span>Đã có trong báo cáo</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleInsertSuggestion(item.content, item.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs transition cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>+ Chèn vào báo cáo</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-700 leading-relaxed text-justify whitespace-pre-wrap pl-1 border-l-2 border-indigo-200">
+                      {item.content}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500 italic">
+                Nguồn: Tổng hợp chỉ đạo chuyên môn Phân xưởng Vận hành Ialy
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSuggestionsModal(false)}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Quản lý, tải ảnh và cắt chữ ký điện tử */}
+      <SignatureModal
+        isOpen={showSignatureModal}
+        onClose={() => setShowSignatureModal(false)}
+        members={auditMembers}
+        leaderName="Trần Thanh Chương"
+        initialTargetName={sigModalTarget}
+        onSignatureUpdated={handleSignatureUpdated}
+      />
     </div>
   );
 };

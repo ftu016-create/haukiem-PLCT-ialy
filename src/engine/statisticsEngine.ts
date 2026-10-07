@@ -761,6 +761,7 @@ export interface DetailedViolationItem {
   vhialyPerson: string; // VHIALY (e.g. "Nguyễn Trung Chính" hoặc "/")
   pxscPerson: string; // PXSC (e.g. "Nguyễn Quốc Tuấn" hoặc "/")
   reason: string; // Lý do không phù hợp
+  note?: string; // Ghi chú
 }
 
 export function extractDocNumber(code: string): string {
@@ -889,6 +890,7 @@ export function getDetailedViolationList(records: NormalizedRecord[]): {
         vhialyPerson,
         pxscPerson,
         reason,
+        note: rec.notes || (rec as any).note || '',
       };
 
       if (rec.documentType === 'PCT') {
@@ -905,8 +907,59 @@ export function getDetailedViolationList(records: NormalizedRecord[]): {
 export const DEFAULT_RECOMMENDATIONS = [
   'Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài.',
   'Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.',
-  'Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định, bảo đảm hồ sơ thao tác đầy đủ và thống nhất.',
-  'Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc; kịp thời nhắc nhở, chấn chỉnh và xử lý các sai sót nhằm nâng cao chất lượng thực hiện và hạn chế tái diễn các lỗi đã được hậu kiểm phát hiện.',
+];
+
+export interface SuggestionItem {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+}
+
+export const SUGGESTED_RECOMMENDATIONS_LIST: SuggestionItem[] = [
+  {
+    id: 'sug-tpm-1',
+    category: 'Quản lý TPM & App dùng chung',
+    title: 'Xử lý tồn tại, hư hỏng, điểm KPH trên App dùng chung',
+    content:
+      'Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài.',
+  },
+  {
+    id: 'sug-tech-1',
+    category: 'Lỗi kỹ thuật khách quan',
+    title: 'Lưu bằng chứng khi phát sinh lỗi phần mềm/mạng và ghi NKVH',
+    content:
+      'Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.',
+  },
+
+  {
+    id: 'sug-supervision-1',
+    category: 'Giám sát & Chấn chỉnh',
+    title: 'Trưởng ca và ATV tăng cường kiểm tra, giám sát thực hiện PCT/LCT',
+    content:
+      'Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc; kịp thời nhắc nhở, chấn chỉnh và xử lý các sai sót nhằm nâng cao chất lượng thực hiện và hạn chế tái diễn các lỗi đã được hậu kiểm phát hiện.',
+  },
+  {
+    id: 'sug-tpm-short',
+    category: 'TPM & App dùng chung (Ngắn gọn)',
+    title: 'Khắc phục tồn tại trên App phân xưởng không để kéo dài',
+    content:
+      'Tại App dùng chung của Phân xưởng, trong các chức năng An toàn vệ sinh lao động / Tồn tại, hư hỏng, điểm không phù hợp / TPM, Kaizen và một số nội dung không phù hợp khác, NVVH đã phản ánh và đề nghị các chức danh được phân giao TPM tại vị trí liên quan chủ động khắc phục hoặc phối hợp với các đơn vị liên quan để xử lý.',
+  },
+  {
+    id: 'sug-tech-short',
+    category: 'Lỗi kỹ thuật khách quan (Ngắn gọn)',
+    title: 'Chụp màn hình báo cáo cấp trên và lưu mục tài liệu khi lỗi mạng/phần mềm',
+    content:
+      'Trong quá trình thực hiện PCT/LCT nếu bị lỗi kỹ thuật khách quan như lỗi phần mềm, lỗi mạng cần có các biện pháp như chụp lại màn hình, báo cáo cấp trên và lưu trong mục "Hồ sơ" hoặc "File đính kèm" đối với PCT - "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT và ghi trong NKVH để có bằng chứng về việc đã tự xác định lỗi do nguyên nhân khách quan.',
+  },
+  {
+    id: 'sug-supervision-short',
+    category: 'Giám sát & Chấn chỉnh (Ngắn gọn)',
+    title: 'Trưởng ca, ATV thường xuyên kiểm tra chấn chỉnh sai phạm',
+    content:
+      'Trưởng ca, ATV các kíp thường xuyên kiểm tra, chấn chỉnh kịp thời các sai phạm trong việc thực hiện PCT, LCT, biện pháp an toàn cho ĐCT vào làm việc./.',
+  },
 ];
 
 export function generateSmartEvaluationAndRecommendations(
@@ -923,11 +976,14 @@ export function generateSmartEvaluationAndRecommendations(
 
   const validRate =
     overview.totalDocuments > 0
-      ? (100 - Number(overview.errorRate)).toFixed(1)
-      : '100.0';
+      ? Math.round(100 - Number(overview.errorRate))
+      : 100;
 
   const validDocs = Math.max(0, overview.totalDocuments - overview.documentsWithErrors);
   const totalViolations = pctViolations.length + lctViolations.length;
+  const roundedErrorRate = Math.round(Number(overview.errorRate));
+  const roundedPctErrorRate = Math.round(Number(overview.pctErrorRate));
+  const roundedLctErrorRate = Math.round(Number(overview.lctErrorRate));
 
   // 1. Phân tích chi tiết các nhóm lỗi thực tế xuất hiện trong kỳ
   let smisCount = 0;
@@ -981,17 +1037,17 @@ export function generateSmartEvaluationAndRecommendations(
   // Đoạn 1: Đánh giá tổng quan số liệu thực hiện trong kỳ
   let para1 = '';
   if (overview.totalDocuments === 0) {
-    para1 = `Trong ${periodText}, phân xưởng không phát sinh hồ sơ PCT/LCT cần hậu kiểm. Công tác quản lý hồ sơ an toàn tiếp tục được theo dõi và duy trì theo quy định.`;
+    para1 = `Trong ${periodText}, phân xưởng không phát sinh PCT/LCT cần hậu kiểm. Công tác kiểm tra an toàn tiếp tục được theo dõi và duy trì theo quy định.`;
   } else if (overview.documentsWithErrors === 0) {
-    para1 = `Về kết quả thực hiện ${periodText}: Toàn bộ ${overview.totalDocuments} hồ sơ (${overview.totalPCT} PCT và ${overview.totalLCT} LCT) được kiểm tra đều hợp lệ 100%, không phát hiện bất kỳ sai sót nào. Các kíp trực, Trưởng ca, Người cấp phiếu, Người cho phép và các đơn vị công tác đã chấp hành nghiêm ngặt mọi quy định của Quy trình an toàn EVN.`;
+    para1 = `Về kết quả thực hiện ${periodText}: Toàn bộ ${overview.totalDocuments} phiếu/lệnh (${overview.totalPCT} PCT và ${overview.totalLCT} LCT) được kiểm tra đều hợp lệ 100%, không phát hiện bất kỳ sai sót nào. Các kíp trực, Trưởng ca, Người cấp phiếu, Người cho phép và các đơn vị công tác đã chấp hành nghiêm ngặt mọi quy định của Quy trình an toàn EVN.`;
   } else {
     let complianceAssessment = 'các kíp trực và nhân viên vận hành cơ bản đã tuân thủ tốt các quy định về an toàn điện.';
-    if (Number(validRate) >= 95) {
-      complianceAssessment = 'công tác thực hiện và kiểm soát an toàn đạt kết quả rất cao, hầu hết các hồ sơ đều hoàn thiện đầy đủ thủ tục.';
-    } else if (Number(validRate) < 80) {
+    if (validRate >= 95) {
+      complianceAssessment = 'công tác thực hiện và kiểm soát an toàn đạt kết quả rất cao, hầu hết các phiếu, lệnh đều hoàn thiện đầy đủ thủ tục.';
+    } else if (validRate < 80) {
       complianceAssessment = 'tuy nhiên tỷ lệ sai sót còn ở mức đáng lưu ý, đòi hỏi các kíp trực và đơn vị liên quan cần nghiêm túc chấn chỉnh.';
     }
-    para1 = `Về kết quả thực hiện ${periodText}: Tổng số hồ sơ được kiểm tra là ${overview.totalDocuments} hồ sơ (gồm ${overview.totalPCT} PCT và ${overview.totalLCT} LCT), trong đó có ${validDocs} hồ sơ hợp lệ (đạt tỷ lệ ${validRate}%) và ${overview.documentsWithErrors} hồ sơ phát hiện nội dung chưa phù hợp (chiếm tỷ lệ ${overview.errorRate}%). Cụ thể: Phiếu công tác có ${overview.pctWithErrors}/${overview.totalPCT} phiếu có lỗi (${overview.pctErrorRate}%); Lệnh công tác có ${overview.lctWithErrors}/${overview.totalLCT} lệnh có lỗi (${overview.lctErrorRate}%). Nhìn chung, ${complianceAssessment}`;
+    para1 = `Về kết quả thực hiện ${periodText}: Tổng số kiểm tra là ${overview.totalDocuments} (gồm ${overview.totalPCT} PCT và ${overview.totalLCT} LCT), trong đó có ${validDocs} phiếu/lệnh hợp lệ (đạt tỷ lệ ${validRate}%) và ${overview.documentsWithErrors} phiếu/lệnh phát hiện nội dung chưa phù hợp (chiếm tỷ lệ ${roundedErrorRate}%). Cụ thể: Phiếu công tác có ${overview.pctWithErrors}/${overview.totalPCT} phiếu có lỗi (${roundedPctErrorRate}%); Lệnh công tác có ${overview.lctWithErrors}/${overview.totalLCT} lệnh có lỗi (${roundedLctErrorRate}%). Nhìn chung, ${complianceAssessment}`;
   }
 
   // Đoạn 2: Phân tích cụ thể các sai sót đặc trưng và trách nhiệm trong tháng này
@@ -1004,7 +1060,7 @@ export function generateSmartEvaluationAndRecommendations(
       errorHighlights.push(`lỗi hiển thị hoặc không lưu chữ ký điện tử trên phần mềm SMIS (${smisCount} lỗi)`);
     }
     if (timingPermitCount > 0) {
-      errorHighlights.push(`thủ tục cho phép, nghịch lý thời gian ký trước bàn giao hoặc thiếu chữ ký kết thúc/khóa phiếu theo Điều 14, Điều 28, Điều 30, Điều 31 (${timingPermitCount} lỗi)`);
+      errorHighlights.push(`thủ tục cấp phép và bàn giao hiện trường chưa chuẩn xác về trình tự thời gian (thời gian ký xác nhận trước thời điểm cho phép bàn giao thực tế) hoặc còn thiếu chữ ký kết thúc, khóa phiếu theo quy định (${timingPermitCount} lỗi)`);
     }
     if (groundingBpatCount > 0) {
       errorHighlights.push(`bỏ trống hoặc chưa xác nhận làm thêm tiếp đất di động, biện pháp an toàn bổ sung theo Điều 25 (${groundingBpatCount} lỗi)`);
@@ -1022,7 +1078,7 @@ export function generateSmartEvaluationAndRecommendations(
 
     const respText = (vhialyResponsibleCount > 0 || pxscResponsibleCount > 0)
       ? ` Qua đối chiếu trách nhiệm, có ${vhialyResponsibleCount} nội dung liên quan đến các chức danh thuộc Phân xưởng Vận hành (Người cấp phiếu, Người cho phép, Trực ban) và ${pxscResponsibleCount} nội dung liên quan đến Đơn vị công tác / Phân xưởng Sửa chữa (Người CHTT, Nhân viên công tác). Đề nghị các cá nhân liên quan trực tiếp rút kinh nghiệm nghiêm túc.`
-      : ` Đề nghị các chức danh phụ trách hồ sơ nghiêm túc rút kinh nghiệm đối với từng điểm chưa phù hợp nêu trên.`;
+      : ` Đề nghị các chức danh phụ trách nghiêm túc rút kinh nghiệm đối với từng điểm chưa phù hợp nêu trên.`;
 
     para2 = `Qua công tác rà soát ${periodText}: Phát hiện tổng cộng ${totalViolations} lỗi chưa phù hợp. ${detailText}${respText}`;
   }
@@ -1031,11 +1087,7 @@ export function generateSmartEvaluationAndRecommendations(
   const para3 =
     'Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài. Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm SMIS, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.';
 
-  // Đoạn 4: Trách nhiệm chấn chỉnh của Trưởng ca, nhân viên vận hành và ATV
-  const para4 =
-    `Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định, bảo đảm hồ sơ thao tác đầy đủ và thống nhất. Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc; kịp thời nhắc nhở, chấn chỉnh và xử lý các sai sót nhằm nâng cao chất lượng thực hiện và ngăn ngừa tái diễn các lỗi đã được hậu kiểm chỉ ra trong ${periodText}.`;
-
-  return [para1, para2, para3, para4];
+  return [para1, para2, para3];
 }
 
 export function getDefaultEvaluationNotes(
@@ -1050,14 +1102,14 @@ export function getDefaultEvaluationNotes(
 
   const validRate =
     overview.totalDocuments > 0
-      ? Math.round(((overview.totalDocuments - overview.documentsWithErrors) / overview.totalDocuments) * 1000) / 10
+      ? Math.round(((overview.totalDocuments - overview.documentsWithErrors) / overview.totalDocuments) * 100)
       : 100;
 
   return [
     `Qua công tác hậu kiểm ${periodText}, các đơn vị và cá nhân cơ bản đã chấp hành tốt quy trình an toàn điện. Đề nghị các cá nhân và đơn vị tiếp tục chấn chỉnh các thiếu sót nêu trên, đặc biệt là việc ghi chép đầy đủ nội dung, thời gian và biện pháp an toàn trước khi cho phép vào làm việc.`,
-    `Tỷ lệ hồ sơ thực hiện đúng quy định đạt ${validRate}%. Các thiếu sót còn tồn tại chủ yếu phát sinh ở khâu kiểm tra thủ tục cho phép, ghi nhận thời gian bắt đầu/kết thúc công tác và ký ra vào vị trí làm việc của nhân viên đơn vị công tác.`,
+    `Tỷ lệ thực hiện đúng quy định đạt ${validRate}%. Các thiếu sót còn tồn tại chủ yếu phát sinh ở khâu kiểm tra thủ tục cho phép, ghi nhận thời gian bắt đầu/kết thúc công tác và ký ra vào vị trí làm việc của nhân viên đơn vị công tác.`,
     `Tại App dùng chung của Phân xưởng, trong các chức năng An toàn vệ sinh lao động / Tồn tại, hư hỏng, điểm không phù hợp / TPM, Kaizen, NVVH đã phản ánh và đề nghị các chức danh được phân giao TPM tại vị trí liên quan chủ động khắc phục hoặc phối hợp với các đơn vị liên quan để xử lý dứt điểm.`,
-    `Trưởng ca, ATV các kíp thường xuyên kiểm tra, chấn chỉnh kịp thời các sai phạm trong việc thực hiện PCT, LCT, biện pháp an toàn cho ĐCT vào làm việc nhằm nâng cao chất lượng hồ sơ và ngăn ngừa tái diễn sai lỗi.`,
+    `Trưởng ca, ATV các kíp thường xuyên kiểm tra, chấn chỉnh kịp thời các sai phạm trong việc thực hiện PCT, LCT, biện pháp an toàn cho ĐCT vào làm việc nhằm nâng cao chất lượng thực hiện và ngăn ngừa tái diễn sai lỗi.`,
   ].join('\n\n');
 }
 
