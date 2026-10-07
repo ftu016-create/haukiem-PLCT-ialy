@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FileText,
   FileCheck,
@@ -26,6 +26,7 @@ import {
   StatisticsOverview,
 } from '../types';
 import {
+  calculateOverview,
   calculateWorkshopAnalysis,
   getDetailedViolationList,
   DEFAULT_RECOMMENDATIONS,
@@ -67,24 +68,77 @@ export const ReportView: React.FC<ReportViewProps> = ({
     filters.year === 'all' ? 2026 : filters.year
   );
 
-  // Danh sách kiến nghị Mục III (Được khởi tạo theo số liệu thực tế kết hợp chỉ đạo của phân xưởng, có thể sửa, thêm/xóa)
+  // Khóa định danh kỳ báo cáo (để lưu và đồng bộ đánh giá riêng cho từng tháng)
+  const periodKey = `${reportType}_${reportType === 'month' ? reportMonth : 'all'}_${reportYear}`;
+
+  // Lọc chính xác danh sách hồ sơ thuộc kỳ báo cáo Tháng / Năm đang chọn
+  const activePeriodRecords = useMemo(() => {
+    return allParsedRecords.filter((r) => {
+      const yearMatch = r.year === reportYear;
+      const monthMatch = reportType === 'year' || r.month === reportMonth;
+      return yearMatch && monthMatch;
+    });
+  }, [allParsedRecords, reportType, reportMonth, reportYear]);
+
+  // Tổng hợp số liệu KPI riêng cho kỳ/tháng đang chọn
+  const activePeriodOverview = useMemo(() => {
+    return calculateOverview(activePeriodRecords);
+  }, [activePeriodRecords]);
+
+  // Trích xuất chi tiết các nội dung không phù hợp của kỳ/tháng đang chọn
+  const { pctViolations, lctViolations } = useMemo(
+    () => getDetailedViolationList(activePeriodRecords),
+    [activePeriodRecords]
+  );
+
+  // Danh sách kiến nghị Mục III: Khởi tạo riêng cho từng tháng theo số liệu hậu kiểm thực tế
   const [recommendations, setRecommendations] = useState<string[]>(() => {
+    const key = `${reportType}_${reportType === 'month' ? reportMonth : 'all'}_${reportYear}`;
     try {
-      const saved = localStorage.getItem('ialy_report_recommendations_v4');
+      const saved = localStorage.getItem(`ialy_report_recs_${key}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return generateSmartEvaluationAndRecommendations(overview, reportMonth, reportYear);
+    return generateSmartEvaluationAndRecommendations(
+      activePeriodOverview,
+      reportType === 'month' ? reportMonth : 'all',
+      reportYear,
+      pctViolations,
+      lctViolations
+    );
   });
+
+  // Tự động chuyển đổi hoặc sinh nội dung đánh giá phù hợp tương ứng với từng tháng được chọn
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`ialy_report_recs_${periodKey}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setRecommendations(parsed);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    const autoRecs = generateSmartEvaluationAndRecommendations(
+      activePeriodOverview,
+      reportType === 'month' ? reportMonth : 'all',
+      reportYear,
+      pctViolations,
+      lctViolations
+    );
+    setRecommendations(autoRecs);
+  }, [periodKey, activePeriodOverview, pctViolations, lctViolations, reportType, reportMonth, reportYear]);
 
   const handleUpdateRecommendation = (idx: number, val: string) => {
     setRecommendations((prev) => {
       const updated = [...prev];
       updated[idx] = val;
       try {
-        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
+        localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
@@ -94,7 +148,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
     setRecommendations((prev) => {
       const updated = [...prev, ''];
       try {
-        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
+        localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
@@ -104,7 +158,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
     setRecommendations((prev) => {
       const updated = prev.filter((_, i) => i !== idx);
       try {
-        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
+        localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
@@ -113,7 +167,21 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const handleResetRecommendations = () => {
     setRecommendations(DEFAULT_RECOMMENDATIONS);
     try {
-      localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(DEFAULT_RECOMMENDATIONS));
+      localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(DEFAULT_RECOMMENDATIONS));
+    } catch (e) {}
+  };
+
+  const handleSmartGenerateRecommendations = () => {
+    const smart = generateSmartEvaluationAndRecommendations(
+      activePeriodOverview,
+      reportType === 'month' ? reportMonth : 'all',
+      reportYear,
+      pctViolations,
+      lctViolations
+    );
+    setRecommendations(smart);
+    try {
+      localStorage.setItem(`ialy_report_recs_${periodKey}`, JSON.stringify(smart));
     } catch (e) {}
   };
 
@@ -174,14 +242,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [drilldownType, setDrilldownType] = useState<'PCT' | 'LCT' | 'ALL' | null>(null);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
-  const workshopStats = calculateWorkshopAnalysis(records, personalStats);
-  const { pctViolations, lctViolations } = useMemo(
-    () => getDetailedViolationList(records),
-    [records]
-  );
+  const workshopStats = calculateWorkshopAnalysis(activePeriodRecords, personalStats);
 
   // 1. Phân loại danh sách Phiếu công tác (PCT)
-  const pctList = useMemo(() => records.filter((r) => r.documentType === 'PCT'), [records]);
+  const pctList = useMemo(() => activePeriodRecords.filter((r) => r.documentType === 'PCT'), [activePeriodRecords]);
   const pctErrorList = useMemo(
     () =>
       pctList.filter(
@@ -192,7 +256,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const pctErrorRate = pctList.length > 0 ? ((pctErrorList.length / pctList.length) * 100).toFixed(1) : '0.0';
 
   // 2. Phân loại danh sách Lệnh công tác (LCT)
-  const lctList = useMemo(() => records.filter((r) => r.documentType === 'LCT'), [records]);
+  const lctList = useMemo(() => activePeriodRecords.filter((r) => r.documentType === 'LCT'), [activePeriodRecords]);
   const lctErrorList = useMemo(
     () =>
       lctList.filter(
@@ -203,7 +267,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const lctErrorRate = lctList.length > 0 ? ((lctErrorList.length / lctList.length) * 100).toFixed(1) : '0.0';
 
   // 3. Tổng hợp Phiếu + Lệnh công tác
-  const totalDocsList = records;
+  const totalDocsList = activePeriodRecords;
   const totalErrorList = useMemo(
     () =>
       totalDocsList.filter(
@@ -233,24 +297,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
     );
   }, [drilldownType, pctErrorList, lctErrorList, totalErrorList, modalSearchTerm]);
 
-  const handleSmartGenerateRecommendations = () => {
-    const smart = generateSmartEvaluationAndRecommendations(
-      overview,
-      reportMonth,
-      reportYear,
-      pctViolations.length,
-      lctViolations.length
-    );
-    setRecommendations(smart);
-    try {
-      localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(smart));
-    } catch (e) {}
-  };
-
   const handleExportWord = () => {
     exportToWord({
-      overview,
-      records,
+      overview: activePeriodOverview,
+      records: activePeriodRecords,
       personalStats,
       monthlyStats,
       reportType,
@@ -564,15 +614,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <tbody className="divide-y divide-slate-200 print:divide-black">
                 <tr>
                   <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {overview.totalPCT}
+                    {activePeriodOverview.totalPCT}
                   </td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {overview.pctValid}
+                    {activePeriodOverview.pctValid}
                   </td>
                   <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
-                    {overview.pctWithErrors}
+                    {activePeriodOverview.pctWithErrors}
                   </td>
                 </tr>
                 <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
@@ -580,9 +630,9 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">
-                    {overview.totalPCT > 0 ? (100 - Number(overview.pctErrorRate)).toFixed(2) : '100'}%
+                    {activePeriodOverview.totalPCT > 0 ? (100 - Number(activePeriodOverview.pctErrorRate)).toFixed(2) : '100'}%
                   </td>
-                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{overview.pctErrorRate}%</td>
+                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{activePeriodOverview.pctErrorRate}%</td>
                 </tr>
               </tbody>
             </table>
@@ -685,19 +735,19 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <tbody className="divide-y divide-slate-200 print:divide-black">
                 <tr>
                   <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
-                    {overview.totalLCT}
+                    {activePeriodOverview.totalLCT}
                   </td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
                   <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
                   <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
-                    {overview.lctWithErrors}
+                    {activePeriodOverview.lctWithErrors}
                   </td>
                 </tr>
                 <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">100%</td>
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
                   <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
-                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{overview.lctErrorRate}%</td>
+                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{activePeriodOverview.lctErrorRate}%</td>
                 </tr>
               </tbody>
             </table>

@@ -913,8 +913,8 @@ export function generateSmartEvaluationAndRecommendations(
   overview: StatisticsOverview,
   month?: number | 'all',
   year?: number,
-  pctViolationsCount = 0,
-  lctViolationsCount = 0
+  pctViolations: DetailedViolationItem[] = [],
+  lctViolations: DetailedViolationItem[] = []
 ): string[] {
   const periodText =
     month && month !== 'all'
@@ -926,12 +926,116 @@ export function generateSmartEvaluationAndRecommendations(
       ? (100 - Number(overview.errorRate)).toFixed(1)
       : '100.0';
 
-  return [
-    `Về kết quả thực hiện ${periodText}: Tổng số hồ sơ được kiểm tra là ${overview.totalDocuments} hồ sơ (gồm ${overview.totalPCT} PCT và ${overview.totalLCT} LCT), trong đó có ${overview.documentsWithErrors} hồ sơ phát hiện nội dung chưa phù hợp (${pctViolationsCount} lỗi PCT chiếm tỷ lệ ${overview.pctErrorRate}%; ${lctViolationsCount} lỗi LCT chiếm tỷ lệ ${overview.lctErrorRate}%). Tỷ lệ hồ sơ thực hiện đúng quy định đạt ${validRate}%; các kíp trực và nhân viên vận hành cơ bản đã tuân thủ tốt các quy định về an toàn điện.`,
-    `Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài.`,
-    `Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm SMIS, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.`,
-    `Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định; Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc, kịp thời nhắc nhở và chấn chỉnh nhằm nâng cao chất lượng thực hiện và hạn chế tái diễn các sai sót đã được hậu kiểm phát hiện.`,
-  ];
+  const validDocs = Math.max(0, overview.totalDocuments - overview.documentsWithErrors);
+  const totalViolations = pctViolations.length + lctViolations.length;
+
+  // 1. Phân tích chi tiết các nhóm lỗi thực tế xuất hiện trong kỳ
+  let smisCount = 0;
+  let timingPermitCount = 0;
+  let groundingBpatCount = 0;
+  let personnelControlCount = 0;
+  let generalDescriptionCount = 0;
+  let vhialyResponsibleCount = 0;
+  let pxscResponsibleCount = 0;
+
+  const allViolations = [...pctViolations, ...lctViolations];
+  allViolations.forEach((v) => {
+    const text = `${v.content} ${v.reason || ''}`.toLowerCase();
+    if (text.includes('smis') || text.includes('không hiển thị chữ ký') || text.includes('không lưu')) {
+      smisCount++;
+    }
+    if (
+      text.includes('thời gian') ||
+      text.includes('trình tự') ||
+      text.includes('nghịch lý') ||
+      text.includes('ký trước') ||
+      text.includes('khóa phiếu') ||
+      text.includes('cho phép') ||
+      text.includes('điều 14') ||
+      text.includes('điều 28') ||
+      text.includes('điều 30') ||
+      text.includes('điều 31')
+    ) {
+      timingPermitCount++;
+    }
+    if (
+      text.includes('tiếp đất') ||
+      text.includes('tiếp địa') ||
+      text.includes('biện pháp an toàn') ||
+      text.includes('bpat') ||
+      text.includes('điều 25')
+    ) {
+      groundingBpatCount++;
+    }
+    if (text.includes('nhân viên') || text.includes('vào/ra') || text.includes('ra vào')) {
+      personnelControlCount++;
+    }
+    if (text.includes('chung chung') || text.includes('điều 20') || text.includes('phạm vi')) {
+      generalDescriptionCount++;
+    }
+
+    if (v.vhialyPerson && v.vhialyPerson !== '/') vhialyResponsibleCount++;
+    if (v.pxscPerson && v.pxscPerson !== '/') pxscResponsibleCount++;
+  });
+
+  // Đoạn 1: Đánh giá tổng quan số liệu thực hiện trong kỳ
+  let para1 = '';
+  if (overview.totalDocuments === 0) {
+    para1 = `Trong ${periodText}, phân xưởng không phát sinh hồ sơ PCT/LCT cần hậu kiểm. Công tác quản lý hồ sơ an toàn tiếp tục được theo dõi và duy trì theo quy định.`;
+  } else if (overview.documentsWithErrors === 0) {
+    para1 = `Về kết quả thực hiện ${periodText}: Toàn bộ ${overview.totalDocuments} hồ sơ (${overview.totalPCT} PCT và ${overview.totalLCT} LCT) được kiểm tra đều hợp lệ 100%, không phát hiện bất kỳ sai sót nào. Các kíp trực, Trưởng ca, Người cấp phiếu, Người cho phép và các đơn vị công tác đã chấp hành nghiêm ngặt mọi quy định của Quy trình an toàn EVN.`;
+  } else {
+    let complianceAssessment = 'các kíp trực và nhân viên vận hành cơ bản đã tuân thủ tốt các quy định về an toàn điện.';
+    if (Number(validRate) >= 95) {
+      complianceAssessment = 'công tác thực hiện và kiểm soát an toàn đạt kết quả rất cao, hầu hết các hồ sơ đều hoàn thiện đầy đủ thủ tục.';
+    } else if (Number(validRate) < 80) {
+      complianceAssessment = 'tuy nhiên tỷ lệ sai sót còn ở mức đáng lưu ý, đòi hỏi các kíp trực và đơn vị liên quan cần nghiêm túc chấn chỉnh.';
+    }
+    para1 = `Về kết quả thực hiện ${periodText}: Tổng số hồ sơ được kiểm tra là ${overview.totalDocuments} hồ sơ (gồm ${overview.totalPCT} PCT và ${overview.totalLCT} LCT), trong đó có ${validDocs} hồ sơ hợp lệ (đạt tỷ lệ ${validRate}%) và ${overview.documentsWithErrors} hồ sơ phát hiện nội dung chưa phù hợp (chiếm tỷ lệ ${overview.errorRate}%). Cụ thể: Phiếu công tác có ${overview.pctWithErrors}/${overview.totalPCT} phiếu có lỗi (${overview.pctErrorRate}%); Lệnh công tác có ${overview.lctWithErrors}/${overview.totalLCT} lệnh có lỗi (${overview.lctErrorRate}%). Nhìn chung, ${complianceAssessment}`;
+  }
+
+  // Đoạn 2: Phân tích cụ thể các sai sót đặc trưng và trách nhiệm trong tháng này
+  let para2 = '';
+  if (totalViolations === 0) {
+    para2 = `Trong kỳ kiểm tra ${periodText}, các chức danh Người cấp phiếu, Người cho phép, Người CHTT và Nhân viên các đơn vị công tác đều thực hiện đầy đủ các bước bàn giao hiện trường, các biện pháp an toàn bổ sung được tích chọn chính xác, thời gian thực hiện công tác được ghi nhận thống nhất và đồng bộ giữa các bên.`;
+  } else {
+    const errorHighlights: string[] = [];
+    if (smisCount > 0) {
+      errorHighlights.push(`lỗi hiển thị hoặc không lưu chữ ký điện tử trên phần mềm SMIS (${smisCount} lỗi)`);
+    }
+    if (timingPermitCount > 0) {
+      errorHighlights.push(`thủ tục cho phép, nghịch lý thời gian ký trước bàn giao hoặc thiếu chữ ký kết thúc/khóa phiếu theo Điều 14, Điều 28, Điều 30, Điều 31 (${timingPermitCount} lỗi)`);
+    }
+    if (groundingBpatCount > 0) {
+      errorHighlights.push(`bỏ trống hoặc chưa xác nhận làm thêm tiếp đất di động, biện pháp an toàn bổ sung theo Điều 25 (${groundingBpatCount} lỗi)`);
+    }
+    if (personnelControlCount > 0) {
+      errorHighlights.push(`chưa ghi nhận đầy đủ chữ ký ra/vào vị trí làm việc của nhân viên công tác (${personnelControlCount} lỗi)`);
+    }
+    if (generalDescriptionCount > 0) {
+      errorHighlights.push(`nội dung hoặc vị trí công việc ghi còn chung chung (${generalDescriptionCount} lỗi)`);
+    }
+
+    const detailText = errorHighlights.length > 0
+      ? `Các sai sót chính tập trung ở các khâu: ${errorHighlights.join('; ')}.`
+      : `Các sai sót phát hiện chủ yếu liên quan đến việc đối soát thủ tục an toàn hiện trường và ghi nhận nhật ký thao tác.`;
+
+    const respText = (vhialyResponsibleCount > 0 || pxscResponsibleCount > 0)
+      ? ` Qua đối chiếu trách nhiệm, có ${vhialyResponsibleCount} nội dung liên quan đến các chức danh thuộc Phân xưởng Vận hành (Người cấp phiếu, Người cho phép, Trực ban) và ${pxscResponsibleCount} nội dung liên quan đến Đơn vị công tác / Phân xưởng Sửa chữa (Người CHTT, Nhân viên công tác). Đề nghị các cá nhân liên quan trực tiếp rút kinh nghiệm nghiêm túc.`
+      : ` Đề nghị các chức danh phụ trách hồ sơ nghiêm túc rút kinh nghiệm đối với từng điểm chưa phù hợp nêu trên.`;
+
+    para2 = `Qua công tác rà soát ${periodText}: Phát hiện tổng cộng ${totalViolations} lỗi chưa phù hợp. ${detailText}${respText}`;
+  }
+
+  // Đoạn 3: Hướng xử lý lỗi kỹ thuật khách quan & App dùng chung (theo chỉ đạo phân xưởng)
+  const para3 =
+    'Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài. Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm SMIS, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.';
+
+  // Đoạn 4: Trách nhiệm chấn chỉnh của Trưởng ca, nhân viên vận hành và ATV
+  const para4 =
+    `Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định, bảo đảm hồ sơ thao tác đầy đủ và thống nhất. Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc; kịp thời nhắc nhở, chấn chỉnh và xử lý các sai sót nhằm nâng cao chất lượng thực hiện và ngăn ngừa tái diễn các lỗi đã được hậu kiểm chỉ ra trong ${periodText}.`;
+
+  return [para1, para2, para3, para4];
 }
 
 export function getDefaultEvaluationNotes(
