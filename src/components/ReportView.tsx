@@ -15,6 +15,9 @@ import {
   RotateCcw,
   UserPlus,
   Sparkles,
+  Lock,
+  Unlock,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   AuditLogEntry,
@@ -24,6 +27,7 @@ import {
   PersonStat,
   RoleStat,
   StatisticsOverview,
+  UserRole,
 } from '../types';
 import {
   calculateOverview,
@@ -46,6 +50,8 @@ interface ReportViewProps {
   filters: FilterState;
   onChangeFilters?: React.Dispatch<React.SetStateAction<FilterState>>;
   auditLogs?: AuditLogEntry[];
+  role?: UserRole;
+  onChangeRole?: (newRole: UserRole) => void;
 }
 
 export const ReportView: React.FC<ReportViewProps> = ({
@@ -57,6 +63,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
   monthlyStats,
   filters,
   onChangeFilters,
+  role = 'VIEWER',
+  onChangeRole,
 }) => {
   const [reportType, setReportType] = useState<'month' | 'year'>(
     filters.month === 'all' ? 'year' : 'month'
@@ -67,6 +75,24 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [reportYear, setReportYear] = useState<number>(
     filters.year === 'all' ? 2026 : filters.year
   );
+
+  // Quyền truy cập: Admin mới được chỉnh sửa, Khách chỉ xem
+  const isAdmin = role === 'ADMIN';
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [adminPinError, setAdminPinError] = useState('');
+
+  const handleVerifyAdmin = () => {
+    const currentPin = localStorage.getItem('ialy_admin_pin') || 'ialy2026';
+    if (adminPinInput === currentPin) {
+      onChangeRole?.('ADMIN');
+      setShowAdminModal(false);
+      setAdminPinInput('');
+      setAdminPinError('');
+    } else {
+      setAdminPinError('Mật khẩu không chính xác');
+    }
+  };
 
   // Khóa định danh kỳ báo cáo (để lưu và đồng bộ đánh giá riêng cho từng tháng)
   const periodKey = `${reportType}_${reportType === 'month' ? reportMonth : 'all'}_${reportYear}`;
@@ -459,7 +485,33 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Huy hiệu vai trò */}
+          {isAdmin ? (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+              <span>Admin (Được chỉnh sửa)</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <div className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Khách (Chỉ xem)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminModal(true)}
+                title="Đăng nhập tài khoản Quản trị viên để chỉnh sửa nội dung báo cáo"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold transition cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5 text-blue-600" />
+                <span>Mở quyền sửa</span>
+              </button>
+            </div>
+          )}
+
+          <div className="h-4 w-px bg-slate-200 hidden sm:block mx-1" />
+
           <button
             onClick={handleExportWord}
             title="Xuất văn bản Word (.doc)"
@@ -944,81 +996,130 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* MỤC III: KIẾN NGHỊ (Chỉnh sửa trực tiếp - Đã bỏ Mục IV trùng lặp) */}
+        {/* MỤC III: ĐÁNH GIÁ & KIẾN NGHỊ (Chỉ Admin mới có quyền chỉnh sửa, Khách chỉ xem) */}
         {/* ========================================================================= */}
         <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 print:text-black flex items-center gap-2">
-              <span><b>III. Đánh giá & Kiến nghị:</b></span>
-              <span className="text-[11px] text-slate-500 font-normal italic print:hidden">
-                ({recommendations.length} nội dung - có thể chỉnh sửa trực tiếp, thêm/xóa)
-              </span>
-            </h3>
-
-            <div className="flex flex-wrap items-center gap-2 print:hidden">
-              <button
-                type="button"
-                onClick={handleSmartGenerateRecommendations}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer font-bold shadow-xs"
-                title="Tự động tính toán số liệu và sinh ra các ý đánh giá & kiến nghị thực tế"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                <span>Đánh giá theo số liệu thực tế</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleResetRecommendations}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium"
-                title="Khôi phục 4 ý kiến nghị gốc ban đầu"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Mẫu kiến nghị gốc</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleAddRecommendation}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer font-semibold"
-              >
-                <Plus className="w-3 h-3" />
-                <span>Thêm ý</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Trình chỉnh sửa tương tác các ý kiến nghị (Ẩn khi in ấn) */}
-          <div className="space-y-3 print:hidden">
-            {recommendations.map((rec, rIdx) => (
-              <div
-                key={rIdx}
-                className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 focus-within:border-blue-500 focus-within:bg-white transition"
-              >
-                <span className="text-xs font-bold text-slate-400 mt-2 select-none shrink-0 w-5">
-                  {rIdx + 1}.
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 print:text-black">
+                <b>III. Đánh giá & Kiến nghị:</b>
+              </h3>
+              {isAdmin ? (
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 print:hidden">
+                  <ShieldCheck className="w-3 h-3 text-purple-600" />
+                  <span>Quyền Admin (Được chỉnh sửa)</span>
                 </span>
-                <textarea
-                  rows={2}
-                  value={rec}
-                  onChange={(e) => handleUpdateRecommendation(rIdx, e.target.value)}
-                  placeholder={`Nhập nội dung ý kiến nghị thứ ${rIdx + 1}...`}
-                  className="flex-1 bg-transparent border-none text-xs text-slate-800 leading-relaxed focus:outline-hidden resize-y p-1"
-                />
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 print:hidden">
+                  <Lock className="w-3 h-3 text-amber-600" />
+                  <span>Chế độ khách (Chỉ xem)</span>
+                </span>
+              )}
+            </div>
+
+            {isAdmin ? (
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
                   type="button"
-                  onClick={() => handleDeleteRecommendation(rIdx)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer mt-1"
-                  title="Xóa ý kiến nghị này"
+                  onClick={handleSmartGenerateRecommendations}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer font-bold shadow-2xs"
+                  title="Tự động tính toán số liệu và sinh ra các ý đánh giá & kiến nghị thực tế"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Đánh giá theo số liệu thực tế</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetRecommendations}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium"
+                  title="Khôi phục 4 ý kiến nghị gốc ban đầu"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Mẫu kiến nghị gốc</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddRecommendation}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer font-semibold"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Thêm ý</span>
                 </button>
               </div>
-            ))}
-
-            {recommendations.length === 0 && (
-              <div className="text-center py-6 border border-dashed border-slate-300 rounded-xl text-slate-400 text-xs">
-                Chưa có ý kiến nghị nào. Nhấp &ldquo;Thêm ý kiến nghị&rdquo; hoặc &ldquo;Khôi phục mẫu chuẩn&rdquo;.
+            ) : (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer"
+                  title="Đăng nhập tài khoản Quản trị viên để chỉnh sửa báo cáo"
+                >
+                  <Lock className="w-3 h-3 text-blue-600" />
+                  <span>Đăng nhập Admin để sửa</span>
+                </button>
               </div>
             )}
           </div>
+
+          {/* Hiển thị trên Web */}
+          {isAdmin ? (
+            /* Trình chỉnh sửa tương tác (Dành cho Quản trị viên - Ẩn khi in ấn) */
+            <div className="space-y-3 print:hidden">
+              {recommendations.map((rec, rIdx) => (
+                <div
+                  key={rIdx}
+                  className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 focus-within:border-blue-500 focus-within:bg-white transition"
+                >
+                  <span className="text-xs font-bold text-slate-400 mt-2 select-none shrink-0 w-5">
+                    {rIdx + 1}.
+                  </span>
+                  <textarea
+                    rows={2}
+                    value={rec}
+                    onChange={(e) => handleUpdateRecommendation(rIdx, e.target.value)}
+                    placeholder={`Nhập nội dung ý kiến nghị thứ ${rIdx + 1}...`}
+                    className="flex-1 bg-transparent border-none text-xs text-slate-800 leading-relaxed focus:outline-hidden resize-y p-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRecommendation(rIdx)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer mt-1"
+                    title="Xóa ý kiến nghị này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {recommendations.length === 0 && (
+                <div className="text-center py-6 border border-dashed border-slate-300 rounded-xl text-slate-400 text-xs">
+                  Chưa có ý kiến nghị nào. Nhấp &ldquo;Thêm ý kiến nghị&rdquo; hoặc &ldquo;Khôi phục mẫu chuẩn&rdquo;.
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Chế độ xem tĩnh đẹp mắt dành cho Khách (Chỉ xem - Không có textarea hay nút xóa - Ẩn khi in) */
+            <div className="space-y-2.5 print:hidden">
+              {recommendations.map((rec, rIdx) => (
+                <div
+                  key={rIdx}
+                  className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200 text-xs text-slate-800 leading-relaxed"
+                >
+                  <span className="font-bold text-slate-500 select-none shrink-0 w-5 mt-0.5">
+                    {rIdx + 1}.
+                  </span>
+                  <div className="flex-1 text-justify whitespace-pre-wrap font-normal">
+                    {rec}
+                  </div>
+                </div>
+              ))}
+              {recommendations.length === 0 && (
+                <div className="text-center py-6 border border-dashed border-slate-300 rounded-xl text-slate-400 text-xs">
+                  Chưa có ý kiến nghị nào trong kỳ này.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Bản in PDF / xem văn bản chuẩn hành chính Nghị định 30 */}
           <div className="hidden print:block space-y-2 text-[13pt] text-black leading-relaxed">
@@ -1044,67 +1145,85 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </span>
             </h4>
 
-            <button
-              type="button"
-              onClick={handleResetMembers}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium print:hidden"
-              title="Khôi phục danh sách thành viên mặc định"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Khôi phục danh sách chuẩn</span>
-            </button>
-          </div>
-
-          {/* Thanh thêm thành viên mới (Chỉ hiện trên giao diện Web) */}
-          <div className="flex items-center gap-2 mb-4 print:hidden">
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddMember();
-                  }
-                }}
-                placeholder="Nhập họ và tên thành viên tham gia mới..."
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleAddMember}
-              disabled={!newMemberName.trim()}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Thêm thành viên</span>
-            </button>
-          </div>
-
-          {/* Danh sách thành viên hiển thị trên Web (Có nút xóa) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
-            {auditMembers.map((name, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between py-1.5 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition group"
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleResetMembers}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium print:hidden"
+                title="Khôi phục danh sách thành viên mặc định"
               >
-                <span className="font-medium text-slate-800">
-                  <span className="text-slate-400 font-bold mr-1.5">{idx + 1}.</span>
-                  {name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteMember(idx)}
-                  className="opacity-60 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
-                  title={`Xóa ${name}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                <RotateCcw className="w-3 h-3" />
+                <span>Khôi phục danh sách chuẩn</span>
+              </button>
+            )}
           </div>
+
+          {/* Thanh thêm thành viên mới (Chỉ dành cho Admin trên giao diện Web) */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 mb-4 print:hidden">
+              <div className="relative flex-1 max-w-md">
+                <input
+                  type="text"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddMember();
+                    }
+                  }}
+                  placeholder="Nhập họ và tên thành viên tham gia mới..."
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddMember}
+                disabled={!newMemberName.trim()}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Thêm thành viên</span>
+              </button>
+            </div>
+          )}
+
+          {/* Danh sách thành viên hiển thị trên Web */}
+          {isAdmin ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
+              {auditMembers.map((name, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between py-1.5 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition group"
+                >
+                  <span className="font-medium text-slate-800">
+                    <span className="text-slate-400 font-bold mr-1.5">{idx + 1}.</span>
+                    {name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMember(idx)}
+                    className="opacity-60 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                    title={`Xóa ${name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
+              {auditMembers.map((name, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center py-2 px-3 bg-slate-50 rounded-lg border border-slate-200 font-medium"
+                >
+                  <span className="text-slate-400 font-bold mr-2">{idx + 1}.</span>
+                  <span className="text-slate-800">{name}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Bản in chuẩn 2 cột dạng văn bản hành chính không có nút xóa */}
           <div className="hidden print:grid grid-cols-2 gap-x-8 gap-y-1 text-[13pt] text-black">
@@ -1313,6 +1432,67 @@ export const ReportView: React.FC<ReportViewProps> = ({
               >
                 Đóng danh sách
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Đăng nhập Quản trị viên để mở quyền chỉnh sửa báo cáo */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác thực Quản trị viên</h3>
+                <p className="text-xs text-slate-500">Nhập mật khẩu Admin để chỉnh sửa nội dung báo cáo</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mật khẩu Admin
+                </label>
+                <input
+                  type="password"
+                  value={adminPinInput}
+                  onChange={(e) => {
+                    setAdminPinInput(e.target.value);
+                    setAdminPinError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleVerifyAdmin();
+                  }}
+                  placeholder="Nhập mật khẩu Admin..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-purple-500 focus:bg-white"
+                  autoFocus
+                />
+                {adminPinError && <p className="text-xs text-rose-600 mt-1">{adminPinError}</p>}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminModal(false);
+                    setAdminPinInput('');
+                    setAdminPinError('');
+                  }}
+                  className="flex-1 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVerifyAdmin}
+                  className="flex-1 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition shadow-xs cursor-pointer"
+                >
+                  Mở quyền sửa
+                </button>
+              </div>
             </div>
           </div>
         </div>

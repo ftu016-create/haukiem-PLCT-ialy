@@ -443,6 +443,8 @@ export default function App() {
               filters={filters}
               onChangeFilters={setFilters}
               auditLogs={combinedAuditLogs}
+              role={userRole}
+              onChangeRole={setUserRole}
             />
           )}
 
