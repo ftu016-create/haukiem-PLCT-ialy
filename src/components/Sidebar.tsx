@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   LayoutDashboard,
-  Grid3X3,
   Users,
   Award,
   AlertOctagon,
@@ -15,7 +14,6 @@ import { UserRole } from '../types';
 
 export type ActiveTab =
   | 'dashboard'
-  | 'heatmap'
   | 'personal'
   | 'records'
   | 'reports'
@@ -51,12 +49,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'dashboard' as ActiveTab,
       label: 'Tổng quan',
       icon: LayoutDashboard,
-    },
-    {
-      id: 'heatmap' as ActiveTab,
-      label: 'Thống kê năm',
-      desc: 'Tần suất lỗi 12 tháng',
-      icon: Grid3X3,
     },
     {
       id: 'personal' as ActiveTab,

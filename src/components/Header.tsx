@@ -17,7 +17,6 @@ import { SyncState, UserRole } from '../types';
 interface HeaderProps {
   syncState: SyncState;
   onSync: () => void;
-  onOpenSheetsModal: () => void;
   role: UserRole;
   onChangeRole: (newRole: UserRole) => void;
 }
@@ -25,7 +24,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   syncState,
   onSync,
-  onOpenSheetsModal,
   role,
   onChangeRole,
 }) => {
@@ -124,36 +122,31 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden sm:inline">Đồng bộ Sheets</span>
               </button>
 
-              {/* Configure Sheets Modal */}
-              <button
-                onClick={onOpenSheetsModal}
-                title="Thiết lập liên kết Google Sheets hoặc tải tệp"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
-              >
-                <Database className="w-3.5 h-3.5 text-slate-600" />
-                <span className="hidden md:inline">Nguồn dữ liệu</span>
-              </button>
-
-              {/* Role Toggle */}
+              {/* Role Toggle: Chế độ Khách / Quản trị viên */}
               {role === 'ADMIN' ? (
                 <button
                   onClick={() => onChangeRole('VIEWER')}
-                  title="Đang ở chế độ Quản trị viên (ADMIN). Bấm để chuyển sang Viewer"
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition cursor-pointer"
+                  title="Đang ở chế độ Quản trị viên (ADMIN). Bấm để chuyển về chế độ Khách"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
                   <span>Admin</span>
-                  <Unlock className="w-3 h-3 ml-0.5 text-purple-500" />
+                  <Unlock className="w-3 h-3 text-purple-500" />
                 </button>
               ) : (
-                <button
-                  onClick={() => setShowPinModal(true)}
-                  title="Bấm để đăng nhập quyền Quản trị viên (Admin)"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition cursor-pointer"
-                >
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Đăng nhập</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                    Khách
+                  </span>
+                  <button
+                    onClick={() => setShowPinModal(true)}
+                    title="Bấm để đăng nhập quyền Quản trị viên (Admin)"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Đăng nhập</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>

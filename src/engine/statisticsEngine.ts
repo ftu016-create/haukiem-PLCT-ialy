@@ -751,3 +751,217 @@ export function calculateWorkshopAnalysis(
     },
   ];
 }
+
+export interface DetailedViolationItem {
+  id: string;
+  docNumber: string; // Số phiếu/lệnh (e.g. 290, 322, 295...)
+  docType: 'PCT' | 'LCT';
+  workType: string; // Điện, Cơ, TCNH, Thủy lực...
+  content: string; // Nội dung không phù hợp
+  vhialyPerson: string; // VHIALY (e.g. "Nguyễn Trung Chính" hoặc "/")
+  pxscPerson: string; // PXSC (e.g. "Nguyễn Quốc Tuấn" hoặc "/")
+  reason: string; // Lý do không phù hợp
+}
+
+export function extractDocNumber(code: string): string {
+  if (!code) return '';
+  const matchSo = code.match(/số\s*(\d+)/i);
+  if (matchSo) return matchSo[1];
+  const matchSlash = code.match(/^(\d+)\//);
+  if (matchSlash) return matchSlash[1];
+  const matchUnderscore = code.match(/^(\d+)_/);
+  if (matchUnderscore) return matchUnderscore[1];
+  const matchTrailingNum = code.match(/(\d+)$/);
+  if (matchTrailingNum) return matchTrailingNum[1];
+  const matchDigits = code.match(/(\d+)/);
+  if (matchDigits) return matchDigits[1];
+  return code;
+}
+
+export function detectWorkType(record: NormalizedRecord): string {
+  const text = `${record.jobName} ${record.unit} ${record.code}`.toLowerCase();
+  if (text.includes('tcnh') || text.includes('tự động') || text.includes('rơ le')) return 'TCNH';
+  if (text.includes('thủy lực') || text.includes('van đĩa') || text.includes('dầu áp lực')) return 'Thủy lực';
+  if (text.includes('máy nén khí') || text.includes('cơ nhiệt') || text.includes('cơ khí') || text.includes('thông gió')) return 'Cơ';
+  return 'Điện';
+}
+
+export function getDetailedViolationList(records: NormalizedRecord[]): {
+  pctViolations: DetailedViolationItem[];
+  lctViolations: DetailedViolationItem[];
+} {
+  const pctViolations: DetailedViolationItem[] = [];
+  const lctViolations: DetailedViolationItem[] = [];
+
+  records.forEach((rec) => {
+    const hasError = rec.result === 'Có sai sót' || rec.errorCount > 0 || rec.parsedErrors.length > 0;
+    if (!hasError) return;
+
+    const docNum = extractDocNumber(rec.code);
+    const workType = detectWorkType(rec);
+
+    const errorsToProcess =
+      rec.parsedErrors.length > 0
+        ? rec.parsedErrors
+        : [
+            {
+              id: `raw-${rec.id}`,
+              severity: 'WARNING' as const,
+              message: rec.rawErrors || 'Nội dung không phù hợp',
+              ruleReference: '',
+              category: 'Khác' as const,
+            },
+          ];
+
+    errorsToProcess.forEach((err, errIdx) => {
+      const errText = `${err.message} ${err.ruleReference || ''}`.toLowerCase();
+
+      let vhialyPerson = '/';
+      let pxscPerson = '/';
+
+      const isVH =
+        errText.includes('cho phép') ||
+        errText.includes('cấp phiếu') ||
+        errText.includes('cấp lệnh') ||
+        errText.includes('ra lệnh') ||
+        errText.includes('trực ban') ||
+        errText.includes('trưởng ca') ||
+        errText.includes('điều 31');
+
+      if (isVH) {
+        if (errText.includes('cấp phiếu') && rec.issuer && !rec.issuer.toLowerCase().includes('chưa rõ')) {
+          vhialyPerson = rec.issuer;
+        } else if (
+          (errText.includes('cấp lệnh') || errText.includes('ra lệnh')) &&
+          rec.orderGiver &&
+          !rec.orderGiver.toLowerCase().includes('chưa rõ')
+        ) {
+          vhialyPerson = rec.orderGiver;
+        } else if (rec.approver && !rec.approver.toLowerCase().includes('chưa rõ')) {
+          vhialyPerson = rec.approver;
+        } else if (rec.issuer && !rec.issuer.toLowerCase().includes('chưa rõ')) {
+          vhialyPerson = rec.issuer;
+        }
+      }
+
+      const isSC =
+        errText.includes('chtt') ||
+        errText.includes('chỉ huy') ||
+        errText.includes('nhân viên') ||
+        errText.includes('đct') ||
+        errText.includes('đội công tác') ||
+        errText.includes('đơn vị công tác') ||
+        errText.includes('điều 30') ||
+        errText.includes('điều 14') ||
+        errText.includes('tiếp đất di động');
+
+      if (isSC) {
+        if (errText.includes('nhân viên') && rec.workers && !rec.workers.toLowerCase().includes('chưa rõ')) {
+          pxscPerson = rec.workers;
+        } else if (rec.leader && !rec.leader.toLowerCase().includes('chưa rõ')) {
+          pxscPerson = rec.leader;
+        } else if (rec.workers && !rec.workers.toLowerCase().includes('chưa rõ')) {
+          pxscPerson = rec.workers;
+        }
+      }
+
+      // Nếu lỗi hệ thống SMIS hoặc không xác định chức danh nào
+      if (!isVH && !isSC) {
+        vhialyPerson = '/';
+        pxscPerson = '/';
+      }
+
+      let reason = 'Theo Điều 21 tại Mẫu 4, Phụ lục 7 của Quy trình an toàn của EVN theo QĐ số 278 ngày 25/02/2026';
+      if (err.ruleReference && err.ruleReference.trim().length > 3) {
+        reason = err.ruleReference.startsWith('Theo')
+          ? err.ruleReference
+          : `Theo ${err.ruleReference} Quy trình an toàn EVN`;
+      } else if (errText.includes('smis') || errText.includes('không lưu') || errText.includes('chữ ký')) {
+        reason = 'Trên phần mềm SMIS bị lỗi không hiển thị chữ ký';
+      }
+
+      const item: DetailedViolationItem = {
+        id: `${rec.id}-${errIdx}`,
+        docNumber: docNum,
+        docType: rec.documentType,
+        workType,
+        content: err.message,
+        vhialyPerson,
+        pxscPerson,
+        reason,
+      };
+
+      if (rec.documentType === 'PCT') {
+        pctViolations.push(item);
+      } else {
+        lctViolations.push(item);
+      }
+    });
+  });
+
+  return { pctViolations, lctViolations };
+}
+
+export const DEFAULT_RECOMMENDATIONS = [
+  'Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài.',
+  'Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.',
+  'Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định, bảo đảm hồ sơ thao tác đầy đủ và thống nhất.',
+  'Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc; kịp thời nhắc nhở, chấn chỉnh và xử lý các sai sót nhằm nâng cao chất lượng thực hiện và hạn chế tái diễn các lỗi đã được hậu kiểm phát hiện.',
+];
+
+export function generateSmartEvaluationAndRecommendations(
+  overview: StatisticsOverview,
+  month?: number | 'all',
+  year?: number,
+  pctViolationsCount = 0,
+  lctViolationsCount = 0
+): string[] {
+  const periodText =
+    month && month !== 'all'
+      ? `tháng ${month < 10 ? '0' + month : month}/${year || 2026}`
+      : `năm ${year || 2026}`;
+
+  const validRate =
+    overview.totalDocuments > 0
+      ? (100 - Number(overview.errorRate)).toFixed(1)
+      : '100.0';
+
+  return [
+    `Về kết quả thực hiện ${periodText}: Tổng số hồ sơ được kiểm tra là ${overview.totalDocuments} hồ sơ (gồm ${overview.totalPCT} PCT và ${overview.totalLCT} LCT), trong đó có ${overview.documentsWithErrors} hồ sơ phát hiện nội dung chưa phù hợp (${pctViolationsCount} lỗi PCT chiếm tỷ lệ ${overview.pctErrorRate}%; ${lctViolationsCount} lỗi LCT chiếm tỷ lệ ${overview.lctErrorRate}%). Tỷ lệ hồ sơ thực hiện đúng quy định đạt ${validRate}%; các kíp trực và nhân viên vận hành cơ bản đã tuân thủ tốt các quy định về an toàn điện.`,
+    `Đối với các tồn tại, hư hỏng, điểm không phù hợp được phản ánh trên App dùng chung của Phân xưởng (các chức năng: An toàn vệ sinh lao động, Tồn tại - hư hỏng - điểm không phù hợp, TPM, Kaizen và các nội dung liên quan khác), đề nghị các chức danh được phân giao quản lý TPM tại khu vực, thiết bị liên quan chủ động kiểm tra, khắc phục hoặc phối hợp với các đơn vị có liên quan để xử lý kịp thời, bảo đảm không để tồn tại kéo dài.`,
+    `Trong quá trình thực hiện PCT/LCT, trường hợp phát sinh lỗi kỹ thuật khách quan (như lỗi phần mềm SMIS, lỗi mạng...), người thực hiện phải chủ động lưu lại bằng chứng (chụp màn hình hoặc hình ảnh liên quan), kịp thời báo cáo cấp có thẩm quyền và lưu vào mục "Hồ sơ" hoặc "File đính kèm" đối với PCT; "Ảnh tài liệu" hoặc "File tài liệu" đối với LCT; đồng thời ghi nhận trong NKVH để làm căn cứ xác định nguyên nhân khách quan khi kiểm tra, đối chiếu.`,
+    `Các Trưởng ca và nhân viên vận hành nghiêm túc rút kinh nghiệm; thực hiện cập nhật đầy đủ các Phiếu thao tác chép lại phục vụ thao tác phần điện/cơ lên PMIS cùng với Phiếu thao tác chính theo đúng quy định; Trưởng ca và ATV các kíp tăng cường công tác kiểm tra, giám sát việc thực hiện PCT/LCT và các biện pháp an toàn đối với ĐCT vào làm việc, kịp thời nhắc nhở và chấn chỉnh nhằm nâng cao chất lượng thực hiện và hạn chế tái diễn các sai sót đã được hậu kiểm phát hiện.`,
+  ];
+}
+
+export function getDefaultEvaluationNotes(
+  overview: StatisticsOverview,
+  month?: number | 'all',
+  year?: number
+): string {
+  const periodText =
+    month && month !== 'all'
+      ? `tháng ${month < 10 ? '0' + month : month}/${year || 2026}`
+      : `năm ${year || 2026}`;
+
+  const validRate =
+    overview.totalDocuments > 0
+      ? Math.round(((overview.totalDocuments - overview.documentsWithErrors) / overview.totalDocuments) * 1000) / 10
+      : 100;
+
+  return [
+    `Qua công tác hậu kiểm ${periodText}, các đơn vị và cá nhân cơ bản đã chấp hành tốt quy trình an toàn điện. Đề nghị các cá nhân và đơn vị tiếp tục chấn chỉnh các thiếu sót nêu trên, đặc biệt là việc ghi chép đầy đủ nội dung, thời gian và biện pháp an toàn trước khi cho phép vào làm việc.`,
+    `Tỷ lệ hồ sơ thực hiện đúng quy định đạt ${validRate}%. Các thiếu sót còn tồn tại chủ yếu phát sinh ở khâu kiểm tra thủ tục cho phép, ghi nhận thời gian bắt đầu/kết thúc công tác và ký ra vào vị trí làm việc của nhân viên đơn vị công tác.`,
+    `Tại App dùng chung của Phân xưởng, trong các chức năng An toàn vệ sinh lao động / Tồn tại, hư hỏng, điểm không phù hợp / TPM, Kaizen, NVVH đã phản ánh và đề nghị các chức danh được phân giao TPM tại vị trí liên quan chủ động khắc phục hoặc phối hợp với các đơn vị liên quan để xử lý dứt điểm.`,
+    `Trưởng ca, ATV các kíp thường xuyên kiểm tra, chấn chỉnh kịp thời các sai phạm trong việc thực hiện PCT, LCT, biện pháp an toàn cho ĐCT vào làm việc nhằm nâng cao chất lượng hồ sơ và ngăn ngừa tái diễn sai lỗi.`,
+  ].join('\n\n');
+}
+
+export const AUDIT_TEAM_MEMBERS = [
+  '1. Nguyễn Văn Toàn',
+  '2. A Ran',
+  '3. Võ Quang Minh',
+  '4. Thái Trần Hoàng Vũ',
+  '5. Nguyễn Hồng Quang',
+  '6. Phùng Ngọc Tú',
+];

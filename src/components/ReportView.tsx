@@ -10,6 +10,11 @@ import {
   ExternalLink,
   ChevronRight,
   ShieldAlert,
+  Plus,
+  Trash2,
+  RotateCcw,
+  UserPlus,
+  Sparkles,
 } from 'lucide-react';
 import {
   AuditLogEntry,
@@ -20,7 +25,14 @@ import {
   RoleStat,
   StatisticsOverview,
 } from '../types';
-import { calculateWorkshopAnalysis } from '../engine/statisticsEngine';
+import {
+  calculateWorkshopAnalysis,
+  getDetailedViolationList,
+  DEFAULT_RECOMMENDATIONS,
+  generateSmartEvaluationAndRecommendations,
+  getDefaultEvaluationNotes,
+  AUDIT_TEAM_MEMBERS,
+} from '../engine/statisticsEngine';
 import { exportToWord, triggerPrintReport } from '../utils/exportService';
 
 interface ReportViewProps {
@@ -55,46 +67,106 @@ export const ReportView: React.FC<ReportViewProps> = ({
     filters.year === 'all' ? 2026 : filters.year
   );
 
-  // Ghi chú cho 7 mục tại Bảng I (Mặc định để trống cho thoáng, có thể nhấp trực tiếp để sửa nội dung và lưu vào Word/PDF)
-  const [customNotes, setCustomNotes] = useState<{ [key: number]: string }>(() => {
+  // Danh sách kiến nghị Mục III (Được khởi tạo theo số liệu thực tế kết hợp chỉ đạo của phân xưởng, có thể sửa, thêm/xóa)
+  const [recommendations, setRecommendations] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('ialy_report_custom_notes_v3');
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem('ialy_report_recommendations_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {}
-    return {
-      1: '',
-      2: '',
-      3: '',
-      4: '',
-      5: '',
-      6: '',
-      7: '',
-    };
+    return generateSmartEvaluationAndRecommendations(overview, reportMonth, reportYear);
   });
 
-  // Đánh giá, kiến nghị và ghi chú bổ sung (Có thể sửa trực tiếp và xuất Word/PDF)
-  const [evaluationNote, setEvaluationNote] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('ialy_report_evaluation_note');
-      if (saved !== null) return saved;
-    } catch (e) {}
-    return 'Qua công tác hậu kiểm, các đơn vị và cá nhân cơ bản đã chấp hành tốt quy trình an toàn điện. Đề nghị các cá nhân và đơn vị tiếp tục chấn chỉnh các thiếu sót nêu trên, đặc biệt là việc ghi chép đầy đủ nội dung, thời gian và biện pháp an toàn trước khi cho phép vào làm việc.';
-  });
-
-  const handleUpdateNote = (key: number, val: string) => {
-    setCustomNotes((prev) => {
-      const updated = { ...prev, [key]: val };
+  const handleUpdateRecommendation = (idx: number, val: string) => {
+    setRecommendations((prev) => {
+      const updated = [...prev];
+      updated[idx] = val;
       try {
-        localStorage.setItem('ialy_report_custom_notes_v3', JSON.stringify(updated));
+        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
   };
 
-  const handleUpdateEvaluation = (val: string) => {
-    setEvaluationNote(val);
+  const handleAddRecommendation = () => {
+    setRecommendations((prev) => {
+      const updated = [...prev, ''];
+      try {
+        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleDeleteRecommendation = (idx: number) => {
+    setRecommendations((prev) => {
+      const updated = prev.filter((_, i) => i !== idx);
+      try {
+        localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleResetRecommendations = () => {
+    setRecommendations(DEFAULT_RECOMMENDATIONS);
     try {
-      localStorage.setItem('ialy_report_evaluation_note', val);
+      localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(DEFAULT_RECOMMENDATIONS));
+    } catch (e) {}
+  };
+
+  // Danh sách thành viên tham gia hậu kiểm (Có thể thêm, xóa thành viên linh hoạt)
+  const DEFAULT_MEMBERS = [
+    'Nguyễn Văn Toàn',
+    'A Ran',
+    'Võ Quang Minh',
+    'Thái Trần Hoàng Vũ',
+    'Nguyễn Hồng Quang',
+    'Phùng Ngọc Tú',
+  ];
+
+  const [auditMembers, setAuditMembers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('ialy_audit_members_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_MEMBERS;
+  });
+
+  const [newMemberName, setNewMemberName] = useState('');
+
+  const handleAddMember = () => {
+    const trimmed = newMemberName.trim();
+    if (!trimmed) return;
+    setAuditMembers((prev) => {
+      const updated = [...prev, trimmed];
+      try {
+        localStorage.setItem('ialy_audit_members_v4', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    setNewMemberName('');
+  };
+
+  const handleDeleteMember = (idx: number) => {
+    setAuditMembers((prev) => {
+      const updated = prev.filter((_, i) => i !== idx);
+      try {
+        localStorage.setItem('ialy_audit_members_v4', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleResetMembers = () => {
+    setAuditMembers(DEFAULT_MEMBERS);
+    try {
+      localStorage.setItem('ialy_audit_members_v4', JSON.stringify(DEFAULT_MEMBERS));
     } catch (e) {}
   };
 
@@ -103,6 +175,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
   const workshopStats = calculateWorkshopAnalysis(records, personalStats);
+  const { pctViolations, lctViolations } = useMemo(
+    () => getDetailedViolationList(records),
+    [records]
+  );
 
   // 1. Phân loại danh sách Phiếu công tác (PCT)
   const pctList = useMemo(() => records.filter((r) => r.documentType === 'PCT'), [records]);
@@ -157,6 +233,20 @@ export const ReportView: React.FC<ReportViewProps> = ({
     );
   }, [drilldownType, pctErrorList, lctErrorList, totalErrorList, modalSearchTerm]);
 
+  const handleSmartGenerateRecommendations = () => {
+    const smart = generateSmartEvaluationAndRecommendations(
+      overview,
+      reportMonth,
+      reportYear,
+      pctViolations.length,
+      lctViolations.length
+    );
+    setRecommendations(smart);
+    try {
+      localStorage.setItem('ialy_report_recommendations_v4', JSON.stringify(smart));
+    } catch (e) {}
+  };
+
   const handleExportWord = () => {
     exportToWord({
       overview,
@@ -166,8 +256,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
       reportType,
       reportMonth,
       reportYear,
-      customNotes,
-      evaluationNote,
+      recommendationsText: recommendations.filter((r) => r.trim()).join('\n'),
+      auditMembers,
     });
   };
 
@@ -378,22 +468,256 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* MỤC 1: BIỂU ĐỒ PHẦN TRĂM DẠNG TRÒN TỶ LỆ PHIẾU LỖI, LỆNH LỖI, TỔNG LỖI */}
+        {/* MỤC I: VIỆC THỰC HIỆN PCT */}
         {/* ========================================================================= */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+              <span><b>I. Việc thực hiện PCT:</b></span>
+            </h3>
+          </div>
+
+          {/* Bảng danh sách chi tiết các phiếu công tác có nội dung không phù hợp */}
+          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
+                <tr>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-14">
+                    Số
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
+                    Loại
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-4 text-left border-r border-slate-300 print:border-black">
+                    Nội dung không phù hợp
+                  </th>
+                  <th colSpan={2} className="py-1 px-3 text-center border-b border-r border-slate-300 print:border-black w-48">
+                    Người liên quan
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-4 text-left w-48">
+                    Lý do không phù hợp
+                  </th>
+                </tr>
+                <tr>
+                  <th className="py-1.5 px-2 text-center border-r border-slate-300 print:border-black w-24">
+                    VHIALY
+                  </th>
+                  <th className="py-1.5 px-2 text-center border-r border-slate-300 print:border-black w-24">
+                    PXSC
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 print:divide-black">
+                {pctViolations.length > 0 ? (
+                  pctViolations.map((v) => (
+                    <tr key={v.id} className="hover:bg-slate-50 print:bg-transparent">
+                      <td className="py-2 px-3 text-center font-bold border-r border-slate-200 print:border-black print:text-black">
+                        {v.docNumber}
+                      </td>
+                      <td className="py-2 px-3 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.workType}
+                      </td>
+                      <td className="py-2 px-4 border-r border-slate-200 print:border-black print:text-black leading-relaxed">
+                        {v.content}
+                      </td>
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.vhialyPerson}
+                      </td>
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.pxscPerson}
+                      </td>
+                      <td className="py-2 px-4 print:border-black print:text-black text-slate-700 leading-relaxed">
+                        {v.reason}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center italic text-slate-500 print:text-black">
+                      Không phát hiện nội dung không phù hợp trong kỳ kiểm tra.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tiêu đề phân cách rõ ràng để 2 bảng không bị dính sát nhau */}
+          <div className="mt-8 mb-3">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black">
+              * Tổng hợp số liệu Phiếu công tác (PCT):
+            </h4>
+          </div>
+
+          {/* Bảng tổng hợp số liệu PCT */}
+          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-6">
+            <table className="w-full text-xs text-center">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
+                <tr>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT đã cấp số</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT không thực hiện</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT giấy</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">PCT đang thực hiện</th>
+                  <th className="py-2 px-3 print:border-black">PCT không phù hợp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 print:divide-black">
+                <tr>
+                  <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
+                    {overview.totalPCT}
+                  </td>
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">
+                    {overview.pctValid}
+                  </td>
+                  <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
+                    {overview.pctWithErrors}
+                  </td>
+                </tr>
+                <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">100%</td>
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">
+                    {overview.totalPCT > 0 ? (100 - Number(overview.pctErrorRate)).toFixed(2) : '100'}%
+                  </td>
+                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{overview.pctErrorRate}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* MỤC II: VIỆC THỰC HIỆN LCT */}
+        {/* ========================================================================= */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+              <span><b>II. Việc thực hiện LCT:</b></span>
+            </h3>
+          </div>
+
+          {/* Bảng danh sách chi tiết các lệnh công tác có nội dung không phù hợp */}
+          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
+                <tr>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-14">
+                    Số
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-3 text-center border-r border-slate-300 print:border-black w-16">
+                    Loại
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-4 text-left border-r border-slate-300 print:border-black">
+                    Nội dung không phù hợp
+                  </th>
+                  <th colSpan={2} className="py-1 px-3 text-center border-b border-r border-slate-300 print:border-black w-48">
+                    Người liên quan
+                  </th>
+                  <th rowSpan={2} className="py-2.5 px-4 text-left w-48">
+                    Lý do không phù hợp
+                  </th>
+                </tr>
+                <tr>
+                  <th className="py-1.5 px-2 text-center border-r border-slate-300 print:border-black w-24">
+                    VHIALY
+                  </th>
+                  <th className="py-1.5 px-2 text-center border-r border-slate-300 print:border-black w-24">
+                    PXSC
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 print:divide-black">
+                {lctViolations.length > 0 ? (
+                  lctViolations.map((v) => (
+                    <tr key={v.id} className="hover:bg-slate-50 print:bg-transparent">
+                      <td className="py-2 px-3 text-center font-bold border-r border-slate-200 print:border-black print:text-black">
+                        {v.docNumber}
+                      </td>
+                      <td className="py-2 px-3 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.workType}
+                      </td>
+                      <td className="py-2 px-4 border-r border-slate-200 print:border-black print:text-black leading-relaxed">
+                        {v.content}
+                      </td>
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.vhialyPerson}
+                      </td>
+                      <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black print:text-black">
+                        {v.pxscPerson}
+                      </td>
+                      <td className="py-2 px-4 print:border-black print:text-black text-slate-700 leading-relaxed">
+                        {v.reason}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center italic text-slate-500 print:text-black">
+                      Không phát hiện nội dung không phù hợp trong kỳ kiểm tra.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tiêu đề phân cách rõ ràng để 2 bảng không bị dính sát nhau */}
+          <div className="mt-8 mb-3">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black">
+              * Tổng hợp số liệu Lệnh công tác (LCT):
+            </h4>
+          </div>
+
+          {/* Bảng tổng hợp số liệu LCT */}
+          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-6">
+            <table className="w-full text-xs text-center">
+              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
+                <tr>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">Tổng LCT được cấp số</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">LCT không thực hiện</th>
+                  <th className="py-2 px-3 border-r border-slate-300 print:border-black">LCT giấy</th>
+                  <th className="py-2 px-3 print:border-black">LCT không phù hợp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 print:divide-black">
+                <tr>
+                  <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black font-mono">
+                    {overview.totalLCT}
+                  </td>
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
+                  <td className="py-2 px-3 border-r border-slate-200 print:border-black print:text-black font-mono">0</td>
+                  <td className="py-2 px-3 font-bold text-rose-600 print:text-black font-mono">
+                    {overview.lctWithErrors}
+                  </td>
+                </tr>
+                <tr className="bg-slate-50/50 print:bg-transparent italic text-slate-600 print:text-black font-mono text-[11px]">
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">100%</td>
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
+                  <td className="py-1 px-3 border-r border-slate-200 print:border-black">0%</td>
+                  <td className="py-1 px-3 font-bold text-rose-700 print:text-black">{overview.lctErrorRate}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 3 Cột Biểu đồ phần trăm dạng tròn trực quan có màu */}
+        <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
-              <span><b>I. Biểu đồ tỷ lệ vi phạm & kết quả soát phiếu công tác, lệnh công tác</b></span>
+              <span><b>Biểu đồ tỷ lệ vi phạm trực quan:</b></span>
             </h3>
             <span className="text-[11px] text-slate-500 italic print:hidden">
               (Nhấp vào từng cột để mở danh sách chi tiết các phiếu, lệnh vi phạm)
             </span>
           </div>
 
-          {/* 3 Cột Biểu đồ phần trăm dạng tròn trực quan có màu (Khung màu như hình đính kèm) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-            {/* Cột 1: TỶ LỆ PHIẾU CÔNG TÁC (PCT) LỖI - Viền xanh dương */}
+            {/* Cột 1: TỶ LỆ PHIẾU CÔNG TÁC (PCT) LỖI */}
             <div
               onClick={() => {
                 setDrilldownType('PCT');
@@ -414,18 +738,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <ExternalLink className="w-3.5 h-3.5 text-blue-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
                 <div className="my-2 flex flex-col items-center justify-center">
                   <div className="relative w-28 h-28 flex items-center justify-center">
                     <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="38"
-                        fill="transparent"
-                        stroke="#dbeafe"
-                        strokeWidth="11"
-                      />
+                      <circle cx="50" cy="50" r="38" fill="transparent" stroke="#dbeafe" strokeWidth="11" />
                       <circle
                         cx="50"
                         cy="50"
@@ -451,7 +767,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Link Footer - Ẩn khi In / Xuất PDF theo yêu cầu */}
               <div className="mt-2 pt-2 border-t border-blue-100 text-center print:hidden">
                 <span className="text-xs font-bold text-blue-600 group-hover:text-blue-800 inline-flex items-center gap-1">
                   <span>Xem danh sách {pctErrorList.length} phiếu lỗi</span>
@@ -460,7 +775,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             </div>
 
-            {/* Cột 2: TỶ LỆ LỆNH CÔNG TÁC (LCT) LỖI - Viền xanh lá */}
+            {/* Cột 2: TỶ LỆ LỆNH CÔNG TÁC (LCT) LỖI */}
             <div
               onClick={() => {
                 setDrilldownType('LCT');
@@ -481,18 +796,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <ExternalLink className="w-3.5 h-3.5 text-emerald-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
                 <div className="my-2 flex flex-col items-center justify-center">
                   <div className="relative w-28 h-28 flex items-center justify-center">
                     <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="38"
-                        fill="transparent"
-                        stroke="#d1fae5"
-                        strokeWidth="11"
-                      />
+                      <circle cx="50" cy="50" r="38" fill="transparent" stroke="#d1fae5" strokeWidth="11" />
                       <circle
                         cx="50"
                         cy="50"
@@ -518,7 +825,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Link Footer - Ẩn khi In / Xuất PDF theo yêu cầu */}
               <div className="mt-2 pt-2 border-t border-emerald-100 text-center print:hidden">
                 <span className="text-xs font-bold text-emerald-600 group-hover:text-emerald-800 inline-flex items-center gap-1">
                   <span>Xem danh sách {lctErrorList.length} lệnh lỗi</span>
@@ -527,7 +833,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             </div>
 
-            {/* Cột 3: TỔNG PHIẾU + LỆNH LỖI - Viền đỏ */}
+            {/* Cột 3: TỔNG PHIẾU + LỆNH LỖI */}
             <div
               onClick={() => {
                 setDrilldownType('ALL');
@@ -548,18 +854,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <ExternalLink className="w-3.5 h-3.5 text-rose-500 opacity-60 group-hover:opacity-100 transition print:hidden" />
                 </div>
 
-                {/* Biểu đồ phần trăm dạng tròn SVG trực quan */}
                 <div className="my-2 flex flex-col items-center justify-center">
                   <div className="relative w-28 h-28 flex items-center justify-center">
                     <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="38"
-                        fill="transparent"
-                        stroke="#ffe4e6"
-                        strokeWidth="11"
-                      />
+                      <circle cx="50" cy="50" r="38" fill="transparent" stroke="#ffe4e6" strokeWidth="11" />
                       <circle
                         cx="50"
                         cy="50"
@@ -585,7 +883,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Link Footer - Ẩn khi In / Xuất PDF theo yêu cầu */}
               <div className="mt-2 pt-2 border-t border-rose-100 text-center print:hidden">
                 <span className="text-xs font-bold text-rose-600 group-hover:text-rose-800 inline-flex items-center gap-1">
                   <span>Xem danh sách {totalErrorList.length} phiếu + lệnh lỗi</span>
@@ -594,301 +891,212 @@ export const ReportView: React.FC<ReportViewProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Bảng I Tổng hợp số liệu hành chính chuẩn (Ghi chú để trống cho thoáng, có thể nhấp vào để chỉnh sửa) */}
-          <div className="border border-slate-300 rounded-lg overflow-hidden print:border-black">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
-                <tr>
-                  <th className="py-2.5 px-3 text-center w-14 border-r border-slate-300 print:border-black">STT</th>
-                  <th className="py-2.5 px-4 text-left border-r border-slate-300 print:border-black">Chỉ số giám sát / Thống kê</th>
-                  <th className="py-2.5 px-4 text-center border-r border-slate-300 print:border-black w-36">Kết quả</th>
-                  <th className="py-2.5 px-4 text-left w-56">Ghi chú</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 print:divide-black">
-                <tr className="print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">1</td>
-                  <td className="py-2.5 px-4 font-medium border-r border-slate-200 print:border-black print:text-black">
-                    Tổng số Phiếu công tác (PCT) đã kiểm tra
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-bold font-mono border-r border-slate-200 print:border-black print:text-black">
-                    {overview.totalPCT}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[1]}
-                      onChange={(e) => handleUpdateNote(1, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[1] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">2</td>
-                  <td className="py-2.5 px-4 font-medium border-r border-slate-200 print:border-black print:text-black">
-                    Tổng số Lệnh công tác (LCT) đã kiểm tra
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-bold font-mono border-r border-slate-200 print:border-black print:text-black">
-                    {overview.totalLCT}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[2]}
-                      onChange={(e) => handleUpdateNote(2, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[2] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="bg-slate-50/60 font-semibold print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">3</td>
-                  <td className="py-2.5 px-4 border-r border-slate-200 print:border-black print:text-black">
-                    Tổng Phiếu và Lệnh công tác đã kiểm tra (Sau loại trùng)
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-black font-mono border-r border-slate-200 text-blue-900 print:text-black">
-                    {overview.totalDocuments}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[3]}
-                      onChange={(e) => handleUpdateNote(3, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y font-normal"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[3] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">4</td>
-                  <td className="py-2.5 px-4 font-medium border-r border-slate-200 print:border-black print:text-black">
-                    Số Phiếu và Lệnh công tác có vi phạm
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-bold font-mono text-rose-600 border-r border-slate-200 print:border-black print:text-black">
-                    {overview.documentsWithErrors}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[4]}
-                      onChange={(e) => handleUpdateNote(4, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[4] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">5</td>
-                  <td className="py-2.5 px-4 font-medium border-r border-slate-200 print:border-black print:text-black">
-                    Tổng số lỗi phát hiện
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-black font-mono text-amber-600 border-r border-slate-200 print:border-black print:text-black">
-                    {overview.totalErrors}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[5]}
-                      onChange={(e) => handleUpdateNote(5, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[5] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="bg-rose-50/40 print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">6</td>
-                  <td className="py-2.5 px-4 font-bold text-rose-900 border-r border-slate-200 print:border-black print:text-black">
-                    Tỷ lệ Phiếu và Lệnh công tác vi phạm (%)
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-black font-mono text-rose-700 border-r border-slate-200 print:border-black print:text-black">
-                    {overview.errorRate}%
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[6]}
-                      onChange={(e) => handleUpdateNote(6, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[6] || ''}
-                    </div>
-                  </td>
-                </tr>
-                <tr className="print:bg-transparent">
-                  <td className="py-2.5 px-3 text-center border-r border-slate-200 print:border-black print:text-black">7</td>
-                  <td className="py-2.5 px-4 font-medium border-r border-slate-200 print:border-black print:text-black">
-                    Số cá nhân liên đới phát hiện sai sót
-                  </td>
-                  <td className="py-2.5 px-4 text-center font-bold font-mono border-r border-slate-200 print:border-black print:text-black">
-                    {overview.totalPeopleWithErrors}
-                  </td>
-                  <td className="py-1 px-3 print:text-black">
-                    <textarea
-                      rows={1}
-                      value={customNotes[7]}
-                      onChange={(e) => handleUpdateNote(7, e.target.value)}
-                      className="print:hidden w-full bg-transparent hover:bg-blue-50/50 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs text-slate-700 border border-transparent hover:border-slate-300 focus:border-blue-500 transition resize-y"
-                      placeholder="Để trống hoặc nhập ghi chú..."
-                      title="Nhấp vào để chỉnh sửa nội dung ghi chú"
-                    />
-                    <div className="hidden print:block text-black text-[13pt] font-normal leading-snug">
-                      {customNotes[7] || ''}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
 
-        {/* Section 2: 12 Months Breakdown (if Year mode) */}
-        {reportType === 'year' && (
-          <div className="mb-6">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 print:text-black">
-              <b>II. Diễn biến số liệu qua 12 tháng trong năm {reportYear}</b>
+        {/* ========================================================================= */}
+        {/* MỤC III: KIẾN NGHỊ (Chỉnh sửa trực tiếp - Đã bỏ Mục IV trùng lặp) */}
+        {/* ========================================================================= */}
+        <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 print:text-black flex items-center gap-2">
+              <span><b>III. Đánh giá & Kiến nghị:</b></span>
+              <span className="text-[11px] text-slate-500 font-normal italic print:hidden">
+                ({recommendations.length} nội dung - có thể chỉnh sửa trực tiếp, thêm/xóa)
+              </span>
             </h3>
-            <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center print:bg-transparent print:border-black print:text-black">
-                  <tr>
-                    <th className="py-2 px-3 border-r border-slate-300 print:border-black whitespace-nowrap min-w-[95px]">Tháng</th>
-                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số PCT</th>
-                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số LCT</th>
-                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Tổng Phiếu/Lệnh</th>
-                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Số vi phạm</th>
-                    <th className="py-2 px-2 border-r border-slate-300 print:border-black">Tổng số lỗi</th>
-                    <th className="py-2 px-2 print:border-black">Tỷ lệ vi phạm (%)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 print:divide-black text-center">
-                  {monthlyStats.map((m) => (
-                    <tr key={m.month} className="hover:bg-slate-50 print:bg-transparent">
-                      <td className="py-2 px-3 font-bold border-r border-slate-200 print:border-black print:text-black whitespace-nowrap min-w-[95px]">
-                        {m.monthLabel}
-                      </td>
-                      <td className="py-2 px-2 font-mono border-r border-slate-200 print:border-black print:text-black">{m.pctCount}</td>
-                      <td className="py-2 px-2 font-mono border-r border-slate-200 print:border-black print:text-black">{m.lctCount}</td>
-                      <td className="py-2 px-2 font-mono font-bold border-r border-slate-200 print:border-black print:text-black">
-                        {m.totalDocuments}
-                      </td>
-                      <td className="py-2 px-2 font-mono text-rose-600 font-bold border-r border-slate-200 print:border-black print:text-black">
-                        {m.errorDocuments}
-                      </td>
-                      <td className="py-2 px-2 font-mono text-amber-600 font-black border-r border-slate-200 print:border-black print:text-black">
-                        {m.totalErrors}
-                      </td>
-                      <td className="py-2 px-2 font-mono print:border-black print:text-black">{m.errorRate}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              <button
+                type="button"
+                onClick={handleSmartGenerateRecommendations}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer font-bold shadow-xs"
+                title="Tự động tính toán số liệu và sinh ra các ý đánh giá & kiến nghị thực tế"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>Đánh giá theo số liệu thực tế</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetRecommendations}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium"
+                title="Khôi phục 4 ý kiến nghị gốc ban đầu"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Mẫu kiến nghị gốc</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddRecommendation}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer font-semibold"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Thêm ý</span>
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Section: Workshop Breakdown (Bỏ cột Chức danh quy định theo yêu cầu) */}
-        <div className="mb-6">
-          <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 print:text-black">
-            <b>{reportType === 'month' ? 'II.' : 'III.'} Tổng hợp theo phân xưởng (PXVH & PXSC)</b>
-          </h3>
+          {/* Trình chỉnh sửa tương tác các ý kiến nghị (Ẩn khi in ấn) */}
+          <div className="space-y-3 print:hidden">
+            {recommendations.map((rec, rIdx) => (
+              <div
+                key={rIdx}
+                className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 focus-within:border-blue-500 focus-within:bg-white transition"
+              >
+                <span className="text-xs font-bold text-slate-400 mt-2 select-none shrink-0 w-5">
+                  {rIdx + 1}.
+                </span>
+                <textarea
+                  rows={2}
+                  value={rec}
+                  onChange={(e) => handleUpdateRecommendation(rIdx, e.target.value)}
+                  placeholder={`Nhập nội dung ý kiến nghị thứ ${rIdx + 1}...`}
+                  className="flex-1 bg-transparent border-none text-xs text-slate-800 leading-relaxed focus:outline-hidden resize-y p-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleDeleteRecommendation(rIdx)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer mt-1"
+                  title="Xóa ý kiến nghị này"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
 
-          <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 text-center print:bg-transparent print:border-black print:text-black">
-                <tr>
-                  <th className="py-2 px-3 text-left border-r border-slate-300 print:border-black w-[40%]">Đơn vị / Phân xưởng</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Số cá nhân</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Số Phiếu/Lệnh vi phạm</th>
-                  <th className="py-2 px-3 border-r border-slate-300 print:border-black w-[15%]">Tổng số lỗi</th>
-                  <th className="py-2 px-3 w-[15%]">Tỷ trọng lỗi (%)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 print:divide-black">
-                {workshopStats.map((ws) => (
-                  <tr key={ws.shortName} className="hover:bg-slate-50 print:bg-transparent">
-                    <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200 print:border-black print:text-black">
-                      {ws.workshopName} ({ws.shortName})
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono border-r border-slate-200 print:border-black print:text-black">
-                      {ws.peopleCount}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-rose-600 font-bold border-r border-slate-200 print:border-black print:text-black">
-                      {ws.violationDocuments}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono font-black text-amber-600 border-r border-slate-200 print:border-black print:text-black">
-                      {ws.totalErrors}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono font-bold print:border-black print:text-black">
-                      {ws.errorShare}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {recommendations.length === 0 && (
+              <div className="text-center py-6 border border-dashed border-slate-300 rounded-xl text-slate-400 text-xs">
+                Chưa có ý kiến nghị nào. Nhấp &ldquo;Thêm ý kiến nghị&rdquo; hoặc &ldquo;Khôi phục mẫu chuẩn&rdquo;.
+              </div>
+            )}
+          </div>
+
+          {/* Bản in PDF / xem văn bản chuẩn hành chính Nghị định 30 */}
+          <div className="hidden print:block space-y-2 text-[13pt] text-black leading-relaxed">
+            {recommendations
+              .filter((r) => r.trim())
+              .map((rec, rIdx) => (
+                <p key={rIdx} className="text-justify mb-2 leading-relaxed" style={{ textIndent: '1.27cm' }}>
+                  {rec.trim().startsWith('-') ? rec.trim() : `- ${rec.trim()}`}
+                </p>
+              ))}
           </div>
         </div>
 
-        {/* Section: Evaluation & Additional Notes (Bỏ khung viền, thụt đầu dòng 1.27cm theo yêu cầu) */}
-        <div className="mb-6">
-          <h3 className="text-xs sm:text-sm font-bold text-slate-900 mb-2 flex items-center justify-between print:text-black">
-            <span><b>{reportType === 'month' ? 'III.' : 'IV.'} Đánh giá, kiến nghị & ghi chú bổ sung</b></span>
-            <span className="text-[11px] text-slate-400 font-normal italic print:hidden">
-              (Nhấp vào để chỉnh sửa nội dung đánh giá)
-            </span>
-          </h3>
-          <div className="mt-1">
-            <textarea
-              rows={3}
-              value={evaluationNote}
-              onChange={(e) => handleUpdateEvaluation(e.target.value)}
-              className="print:hidden w-full bg-slate-50/70 hover:bg-white focus:bg-white focus:ring-1 focus:ring-blue-500 rounded-lg p-2.5 text-xs text-slate-800 border border-slate-200 focus:border-blue-500 transition resize-y leading-relaxed"
-              style={{ textIndent: '1.27cm' }}
-              placeholder="Nhập nội dung đánh giá, kiến nghị hoặc ghi chú thêm cho báo cáo..."
-            />
-            <div className="hidden print:block text-[13pt] text-black leading-relaxed">
-              {evaluationNote
-                .split('\n')
-                .filter((line) => line.trim())
-                .map((para, pIdx) => (
-                  <p key={pIdx} style={{ textIndent: '1.27cm' }} className="mb-1 text-justify">
-                    {para}
+        {/* ========================================================================= */}
+        {/* CÁC THÀNH VIÊN THAM GIA HẬU KIỂM (Có thể thêm hoặc xóa linh hoạt) */}
+        {/* ========================================================================= */}
+        <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-2 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h4 className="font-bold text-xs sm:text-sm print:text-[13pt] text-slate-900 print:text-black">
+              <b>Các thành viên tham gia hậu kiểm:</b>
+              <span className="text-[11px] text-slate-500 font-normal italic ml-2 print:hidden">
+                ({auditMembers.length} thành viên)
+              </span>
+            </h4>
+
+            <button
+              type="button"
+              onClick={handleResetMembers}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer font-medium print:hidden"
+              title="Khôi phục danh sách thành viên mặc định"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Khôi phục danh sách chuẩn</span>
+            </button>
+          </div>
+
+          {/* Thanh thêm thành viên mới (Chỉ hiện trên giao diện Web) */}
+          <div className="flex items-center gap-2 mb-4 print:hidden">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddMember();
+                  }
+                }}
+                placeholder="Nhập họ và tên thành viên tham gia mới..."
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleAddMember}
+              disabled={!newMemberName.trim()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Thêm thành viên</span>
+            </button>
+          </div>
+
+          {/* Danh sách thành viên hiển thị trên Web (Có nút xóa) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-800 print:hidden">
+            {auditMembers.map((name, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between py-1.5 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition group"
+              >
+                <span className="font-medium text-slate-800">
+                  <span className="text-slate-400 font-bold mr-1.5">{idx + 1}.</span>
+                  {name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteMember(idx)}
+                  className="opacity-60 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                  title={`Xóa ${name}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Bản in chuẩn 2 cột dạng văn bản hành chính không có nút xóa */}
+          <div className="hidden print:grid grid-cols-2 gap-x-8 gap-y-1 text-[13pt] text-black">
+            <div>
+              {auditMembers.slice(0, Math.ceil(auditMembers.length / 2)).map((name, idx) => (
+                <p key={idx} className="mb-0.5">
+                  {idx + 1}. {name}
+                </p>
+              ))}
+            </div>
+            <div>
+              {auditMembers.slice(Math.ceil(auditMembers.length / 2)).map((name, idx) => {
+                const actualIndex = Math.ceil(auditMembers.length / 2) + idx + 1;
+                return (
+                  <p key={idx} className="mb-0.5">
+                    {actualIndex}. {name}
                   </p>
-                ))}
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* Formal Corporate Signatures */}
-        <div className="flex justify-end pt-10 text-center text-xs sm:text-sm">
-          <div className="w-56">
-            <p className="font-bold uppercase text-slate-800">NGƯỜI LẬP BÁO CÁO</p>
-            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">(Ký, ghi rõ họ tên)</p>
+        <div className="flex justify-between items-start pt-6 text-xs sm:text-sm">
+          <div className="w-48 text-left text-xs sm:text-[11pt]">
+            <p className="font-bold italic text-slate-800 print:text-black">Nơi nhận:</p>
+            <p className="text-slate-600 print:text-black">- LĐPX (để b/c);</p>
+            <p className="text-slate-600 print:text-black">- PXSC (để biết);</p>
+            <p className="text-slate-600 print:text-black">- Lưu ATV.</p>
+          </div>
+          <div className="w-56 text-center">
+            <p className="font-bold uppercase text-slate-900 print:text-black print:text-[12pt]">
+              TRƯỞNG NHÓM
+            </p>
+            <p className="text-[10px] sm:text-xs text-slate-400 print:text-black italic mt-0.5">
+              (Ký, ghi rõ họ tên)
+            </p>
             <div className="h-16"></div>
+            <p className="font-bold text-slate-900 print:text-black text-xs sm:text-[13pt]">
+              Trần Thanh Chương
+            </p>
           </div>
         </div>
       </div>

@@ -64,7 +64,8 @@ export default function App() {
     return localStorage.getItem('ialy_admin_pin') || 'ialy2026';
   });
 
-  const [userRole, setUserRole] = useState<UserRole>('ADMIN');
+  // Khởi tạo vai trò người dùng mặc định là Khách (VIEWER) theo yêu cầu
+  const [userRole, setUserRole] = useState<UserRole>('VIEWER');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -267,18 +268,14 @@ export default function App() {
 
   // Export handlers
   const handleExportWord = () => {
-    let savedNotes: { [key: number]: string } | undefined = undefined;
-    let savedEval: string | undefined = undefined;
+    let savedRecs: string[] | undefined = undefined;
+    let savedMembers: string[] | undefined = undefined;
     try {
-      const raw = localStorage.getItem('ialy_report_custom_notes_v3');
-      if (raw) savedNotes = JSON.parse(raw);
-      const evalRaw = localStorage.getItem('ialy_report_evaluation_note');
-      if (evalRaw) savedEval = evalRaw;
+      const recRaw = localStorage.getItem('ialy_report_recommendations_v4');
+      if (recRaw) savedRecs = JSON.parse(recRaw);
+      const memRaw = localStorage.getItem('ialy_audit_members_v4');
+      if (memRaw) savedMembers = JSON.parse(memRaw);
     } catch (e) {}
-
-    const defaultEval =
-      'Qua công tác hậu kiểm, các đơn vị và cá nhân cơ bản đã chấp hành tốt quy trình an toàn điện. Đề nghị các cá nhân và đơn vị tiếp tục chấn chỉnh các thiếu sót nêu trên, đặc biệt là việc ghi chép đầy đủ nội dung, thời gian và biện pháp an toàn trước khi cho phép vào làm việc.';
-    const effectiveEval = savedEval !== undefined && savedEval !== null ? savedEval : defaultEval;
 
     exportToWord({
       overview,
@@ -286,10 +283,10 @@ export default function App() {
       personalStats,
       monthlyStats,
       reportType: filters.month === 'all' ? 'year' : 'month',
-      reportMonth: filters.month === 'all' ? 9 : filters.month,
+      reportMonth: filters.month === 'all' ? 8 : filters.month,
       reportYear: filters.year === 'all' ? 2026 : filters.year,
-      customNotes: savedNotes,
-      evaluationNote: effectiveEval,
+      recommendationsText: savedRecs ? savedRecs.filter((r) => r.trim()).join('\n') : undefined,
+      auditMembers: savedMembers,
     });
   };
 
@@ -311,7 +308,6 @@ export default function App() {
         <Header
           syncState={syncState}
           onSync={handleSync}
-          onOpenSheetsModal={() => setIsSettingsOpen(true)}
           role={userRole}
           onChangeRole={setUserRole}
         />
@@ -328,7 +324,6 @@ export default function App() {
           </button>
           <span className="text-xs font-bold text-slate-800">
             {activeTab === 'dashboard' && 'Tổng quan'}
-            {activeTab === 'heatmap' && 'Thống kê năm'}
             {activeTab === 'personal' && 'Thống kê Cá nhân liên quan'}
             {activeTab === 'records' && 'Danh sách & Tra cứu'}
             {activeTab === 'reports' && 'Báo cáo & Xuất file'}
@@ -411,7 +406,7 @@ export default function App() {
                 targetYear={filters.year === 'all' ? 2026 : filters.year}
               />
               <HeatmapMatrix
-                personalStats={personalStats.slice(0, 10)}
+                personalStats={personalStats}
                 targetYear={filters.year === 'all' ? 2026 : filters.year}
                 onSelectPerson={(name) => {
                   setFilters((prev) => ({ ...prev, searchQuery: name }));
@@ -420,18 +415,6 @@ export default function App() {
               />
               <DataTable records={filteredRecords} />
             </div>
-          )}
-
-          {/* TAB: HEATMAP MATRIX */}
-          {activeTab === 'heatmap' && (
-            <HeatmapMatrix
-              personalStats={personalStats}
-              targetYear={filters.year === 'all' ? 2026 : filters.year}
-              onSelectPerson={(name) => {
-                setFilters((prev) => ({ ...prev, searchQuery: name }));
-                setActiveTab('records');
-              }}
-            />
           )}
 
           {/* TAB: PERSONAL ANALYSIS */}
