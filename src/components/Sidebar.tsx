@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'reports' as ActiveTab,
       label: 'Báo cáo & Xuất file',
-      desc: 'Báo cáo Tháng, Năm, Xuất Word',
+      desc: 'Báo cáo Tháng, Năm, Xuất Word/PDF',
       icon: FileCheck2,
     },
     {
@@ -156,6 +156,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
+
+      {/* Footer Info */}
+      <div className="p-4 border-t border-slate-100 text-slate-500 text-[11px] space-y-1">
+        <div className="flex items-center justify-between text-slate-600">
+          <span>Quyền hiện tại:</span>
+          <span className="font-semibold text-slate-800">{role}</span>
+        </div>
+        <div className="text-slate-400 text-[10px]">
+          Phiên bản 2.6.4 • Quy chuẩn EVN
+        </div>
+      </div>
     </aside>
   );
 };

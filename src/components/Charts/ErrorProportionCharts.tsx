@@ -164,42 +164,17 @@ const DonutItem: React.FC<DonutChartProps> = ({
 
         {/* Footer Total Summary */}
         <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-600">
-          <span>Tổng số lượng:</span>
+          <span>Tổng số lượng cấp:</span>
           <strong className="text-slate-900 font-bold font-mono bg-slate-100 px-2 py-0.5 rounded-md">
             {totalCount} Phiếu / Lệnh
           </strong>
         </div>
-
-        {/* Danh sách các phiếu/lệnh lỗi tiêu biểu ở dưới biểu đồ (chỉ hiện khi có lỗi) */}
-        {sampleErrors.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-slate-100">
-            <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-1.5">
-              Phiếu/Lệnh lỗi tiêu biểu ({Math.min(sampleErrors.length, 2)} / {errorCount}):
-            </span>
-            <div className="space-y-1.5">
-              {sampleErrors.slice(0, 2).map((rec, i) => (
-                <div
-                  key={rec.id || i}
-                  className="bg-slate-50/80 p-2 rounded-lg border border-slate-200/70 text-[11px] hover:bg-white transition"
-                >
-                  <div className="flex items-center justify-between text-slate-900 font-bold mb-0.5">
-                    <span className="font-mono text-blue-700">{rec.code}</span>
-                    <span className="text-[10px] text-slate-500">CHTT: {rec.leader}</span>
-                  </div>
-                  <p className="text-rose-700 text-[10px] line-clamp-1 italic">
-                    ⚠️ {rec.parsedErrors[0]?.message || 'Có sai sót trong thủ tục'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Action Footer */}
-      <div className="mt-3 pt-2 border-t border-slate-100 text-center">
+      <div className="mt-3 pt-2.5 border-t border-slate-100 text-center">
         <span className="text-xs font-bold text-blue-600 group-hover:text-blue-800 inline-flex items-center gap-1">
-          <span>Xem danh sách chi tiết ({errorCount} bản ghi)</span>
+          <span>Xem danh sách chi tiết ({errorCount} bản ghi vi phạm)</span>
           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
         </span>
       </div>
@@ -267,10 +242,10 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {/* 1: Tỉ lệ số Phiếu vi phạm / Tổng số Phiếu */}
+        {/* 1: Phiếu công tác (PCT) */}
         <DonutItem
           indexNumber={1}
-          title="Tỉ lệ số Phiếu vi phạm / Tổng số Phiếu"
+          title="Phiếu công tác (PCT)"
           errorCount={overview.pctWithErrors}
           validCount={overview.pctValid}
           totalCount={overview.totalPCT}
@@ -281,9 +256,9 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
           theme={{
             badgeBg: 'bg-blue-600',
             badgeText: 'text-white',
-            border: 'border-slate-200/90',
-            errorColor: '#e11d48', // rose-600
-            validColor: '#2563eb', // blue-600
+            border: 'border-blue-200/90',
+            errorColor: '#2563eb', // blue-600
+            validColor: '#dbeafe', // light blue
           }}
           sampleErrors={pctErrorList}
           onOpenList={() => {
@@ -292,10 +267,10 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
           }}
         />
 
-        {/* 2: Tỉ lệ số Lệnh vi phạm / Tổng số Lệnh */}
+        {/* 2: Lệnh công tác (LCT) */}
         <DonutItem
           indexNumber={2}
-          title="Tỉ lệ số Lệnh vi phạm / Tổng số Lệnh"
+          title="Lệnh công tác (LCT)"
           errorCount={overview.lctWithErrors}
           validCount={overview.lctValid}
           totalCount={overview.totalLCT}
@@ -306,9 +281,9 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
           theme={{
             badgeBg: 'bg-emerald-600',
             badgeText: 'text-white',
-            border: 'border-slate-200/90',
-            errorColor: '#ea580c', // orange-600
-            validColor: '#059669', // emerald-600
+            border: 'border-emerald-200/90',
+            errorColor: '#059669', // emerald-600
+            validColor: '#d1fae5', // light emerald
           }}
           sampleErrors={lctErrorList}
           onOpenList={() => {
@@ -317,10 +292,10 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
           }}
         />
 
-        {/* 3: Tỉ lệ tổng số Phiếu + Lệnh vi phạm / Tổng số Phiếu lệnh */}
+        {/* 3: Tổng Phiếu & Lệnh lỗi */}
         <DonutItem
           indexNumber={3}
-          title="Tỉ lệ tổng số Phiếu + Lệnh vi phạm / Tổng số Phiếu lệnh"
+          title="Tổng Phiếu & Lệnh lỗi"
           errorCount={overview.documentsWithErrors}
           validCount={overview.validDocuments}
           totalCount={overview.totalDocuments}
@@ -331,9 +306,9 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
           theme={{
             badgeBg: 'bg-rose-600',
             badgeText: 'text-white',
-            border: 'border-slate-200/90',
-            errorColor: '#dc2626', // red-600
-            validColor: '#10b981', // emerald-500
+            border: 'border-rose-200/90',
+            errorColor: '#e11d48', // rose-600
+            validColor: '#ffe4e6', // light rose
           }}
           sampleErrors={totalErrorList}
           onOpenList={() => {

@@ -53,6 +53,9 @@ export const HeatmapMatrix: React.FC<HeatmapMatrixProps> = ({
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <span>Thống kê năm</span>
           </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Theo dõi số lượng Phiếu và Lệnh công tác vi phạm và cảnh báo cá nhân tự động (Năm {targetYear})
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

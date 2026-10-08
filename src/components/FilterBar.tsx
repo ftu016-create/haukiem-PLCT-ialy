@@ -74,6 +74,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 </span>
               )}
             </div>
+            <p className="text-[11px] text-slate-400">
+              Lọc Phiếu & Lệnh công tác theo thời gian, phân loại và tình trạng kiểm định
+            </p>
           </div>
         </div>
 

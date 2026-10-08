@@ -26,14 +26,14 @@ export function hasCustomSignature(rawName: string): boolean {
 
 /**
  * Lấy mã HTML/SVG của chữ ký cho một người cụ thể
- * Trả về chuỗi rỗng nếu không có chữ ký
+ * Trả về chuỗi rỗng nếu không có chữ ký (không dùng chữ ký giả lập tạm thời)
  */
 export function getMemberSignatureSvg(rawName: string): string {
   return getRealSignatureSvg(rawName);
 }
 
 /**
- * Chuyển đổi SVG hoặc ảnh thành Base64 Data URI
+ * Chuyển đổi SVG hoặc ảnh thành Base64 Data URI để nhúng vào văn bản Word
  */
 export function getMemberSignatureDataUri(rawName: string): string {
   const norm = cleanSignatureName(rawName);
@@ -126,6 +126,7 @@ export async function cropImageArea(
       img.onload = async () => {
         const scaleX = img.width / box.imgWidth;
         const scaleY = img.height / box.imgHeight;
+
         const cropX = Math.max(0, box.x * scaleX);
         const cropY = Math.max(0, box.y * scaleY);
         const cropW = Math.min(img.width - cropX, box.width * scaleX);
@@ -187,74 +188,7 @@ export function resetCustomMemberSignature(rawName: string): void {
 }
 
 /**
- * Chuyển SVG chữ ký sang PNG Base64 không đồng bộ (cho file xuất Word MHTML)
- */
-export async function getSignaturePngBase64(rawName: string): Promise<string> {
-  const norm = cleanSignatureName(rawName);
-
-  // 1. Kiểm tra ảnh tùy chỉnh đã tải lên
-  try {
-    const customImg = localStorage.getItem(`ialy_custom_sig_${norm}`);
-    if (customImg && customImg.startsWith('data:image')) {
-      const match = customImg.match(/^data:image\/[a-zA-Z0-9+.-]+;base64,(.+)$/);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-  } catch (e) {}
-
-  // 2. Lấy SVG chuẩn thực tế
-  const svgStr = getRealSignatureSvg(rawName);
-  if (!svgStr) return '';
-
-  if (svgStr.startsWith('<img')) {
-    const match = svgStr.match(/src="data:image\/[^;]+;base64,([^"]+)"/);
-    if (match && match[1]) {
-      return match[1];
-    }
-  }
-
-  // 3. Render SVG ra Canvas để tạo PNG Base64 trong suốt
-  return new Promise((resolve) => {
-    try {
-      const img = new Image();
-      const svgClean = svgStr.trim();
-      const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgClean)}`;
-
-      const timer = setTimeout(() => {
-        resolve('');
-      }, 2000);
-
-      img.onload = () => {
-        clearTimeout(timer);
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = 260;
-          canvas.height = 100;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, 260, 100);
-            ctx.drawImage(img, 0, 0, 260, 100);
-            const dataUrl = canvas.toDataURL('image/png');
-            resolve(dataUrl.replace(/^data:image\/png;base64,/, ''));
-            return;
-          }
-        } catch (err) {}
-        resolve('');
-      };
-      img.onerror = () => {
-        clearTimeout(timer);
-        resolve('');
-      };
-      img.src = dataUri;
-    } catch (e) {
-      resolve('');
-    }
-  });
-}
-
-/**
- * Hàm đồng bộ tạo Base64 PNG của chữ ký để nhúng vào MHTML
+ * Tạo Base64 PNG của chữ ký để chèn ảnh nội tuyến vào tài liệu Word MHTML
  */
 export function createSignatureCanvasBase64(rawName: string): string {
   const norm = cleanSignatureName(rawName);
@@ -270,7 +204,7 @@ export function createSignatureCanvasBase64(rawName: string): string {
     }
   } catch (e) {}
 
-  // 2. Nếu có ảnh img trong getRealSignatureSvg
+  // 2. Nếu có chữ ký vector thực tế, chuyển sang Data URI
   const svgStr = getRealSignatureSvg(rawName);
   if (!svgStr) return '';
 

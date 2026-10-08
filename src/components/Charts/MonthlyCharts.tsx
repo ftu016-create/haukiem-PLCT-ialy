@@ -25,6 +25,9 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ monthlyData, targe
             <BarChart3 className="w-4 h-4 text-blue-600" />
             <span>Xu hướng 12 Tháng Năm {targetYear}</span>
           </h2>
+          <p className="text-xs text-slate-500">
+            Biểu đồ phân tích dữ liệu đối soát Phiếu & Lệnh công tác
+          </p>
         </div>
 
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">
@@ -119,23 +122,23 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ monthlyData, targe
                     )}
 
                     {/* Bars */}
-                    <div className="w-full flex items-end justify-center gap-1 h-full">
-                      {/* PCT Bar */}
+                    <div className="w-full flex items-end justify-center gap-1.5 sm:gap-2 h-full px-0.5">
+                      {/* PCT Bar (Xanh dương) */}
                       <div
                         style={{ height: `${Math.max(pctHeight, d.pctCount > 0 ? 8 : 0)}%` }}
-                        className="w-1/3 bg-blue-600 rounded-t-sm group-hover:bg-blue-700 transition-all relative"
+                        className="w-2.5 sm:w-3.5 max-w-[14px] bg-blue-600 rounded-t-sm group-hover:bg-blue-700 transition-all relative shadow-2xs"
                       >
                         {d.pctCount > 0 && (
-                          <span className="text-[9px] font-bold text-white absolute -top-4 left-1/2 -translate-x-1/2 text-slate-700">
+                          <span className="text-[9px] font-bold absolute -top-4 left-1/2 -translate-x-1/2 text-blue-700">
                             {d.pctCount}
                           </span>
                         )}
                       </div>
 
-                      {/* LCT Bar */}
+                      {/* LCT Bar (Xanh lá) */}
                       <div
                         style={{ height: `${Math.max(lctHeight, d.lctCount > 0 ? 8 : 0)}%` }}
-                        className="w-1/3 bg-emerald-500 rounded-t-sm group-hover:bg-emerald-600 transition-all relative"
+                        className="w-2.5 sm:w-3.5 max-w-[14px] bg-emerald-500 rounded-t-sm group-hover:bg-emerald-600 transition-all relative shadow-2xs"
                       >
                         {d.lctCount > 0 && (
                           <span className="text-[9px] font-bold absolute -top-4 left-1/2 -translate-x-1/2 text-emerald-800">
@@ -144,10 +147,10 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ monthlyData, targe
                         )}
                       </div>
 
-                      {/* Error Docs Bar */}
+                      {/* Error Docs Bar (Đỏ) */}
                       <div
                         style={{ height: `${Math.max(errHeight, d.errorDocuments > 0 ? 8 : 0)}%` }}
-                        className="w-1/3 bg-rose-500 rounded-t-sm group-hover:bg-rose-600 transition-all relative"
+                        className="w-2.5 sm:w-3.5 max-w-[14px] bg-rose-500 rounded-t-sm group-hover:bg-rose-600 transition-all relative shadow-2xs"
                       >
                         {d.errorDocuments > 0 && (
                           <span className="text-[9px] font-bold absolute -top-4 left-1/2 -translate-x-1/2 text-rose-700">
