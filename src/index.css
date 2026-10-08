@@ -2,8 +2,8 @@
 
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 20mm 20mm 20mm 30mm !important; /* Nghị định 30: Trên 2cm, Dưới 2cm, Phải 2cm, Trái 3cm */
+    size: A4 landscape;
+    margin: 20mm 20mm 20mm 30mm !important; /* Nghị định 30 & Chuẩn EVN A4 ngang: Trên 2cm, Dưới 2cm, Phải 2cm, Trái 3cm */
   }
 
   html, body, #root, div, main {

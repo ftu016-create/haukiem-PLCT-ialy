@@ -60,7 +60,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth?.currentUser?.emailVerified,
       isAnonymous: auth?.currentUser?.isAnonymous,
       tenantId: auth?.currentUser?.tenantId,
-      providerInfo: auth?.currentUser?.providerData?.map((provider) => ({
+      providerInfo: auth?.currentUser?.providerData?.map((provider: { providerId: string; email: string | null }) => ({
         providerId: provider.providerId,
         email: provider.email,
       })) || [],
@@ -91,9 +91,9 @@ export function subscribeToSharedReports(
   const reportsCollection = collection(db, 'reports');
   return onSnapshot(
     reportsCollection,
-    (snapshot) => {
+    (snapshot: any) => {
       const reports: ReportData[] = [];
-      snapshot.forEach((docSnap) => {
+      snapshot.forEach((docSnap: any) => {
         const data = docSnap.data() as ReportData;
         reports.push(data);
       });
@@ -105,7 +105,7 @@ export function subscribeToSharedReports(
       });
       onReports(reports);
     },
-    (error) => {
+    (error: any) => {
       handleFirestoreError(error, OperationType.GET, 'reports');
       if (onError) onError(error);
     }
@@ -146,7 +146,7 @@ export async function syncLocalReportsToCloud(localReports: ReportData[]): Promi
     const reportsCollection = collection(db, 'reports');
     const existingSnap = await getDocs(reportsCollection);
     const existingIds = new Set<string>();
-    existingSnap.forEach((d) => existingIds.add(d.id));
+    existingSnap.forEach((d: any) => existingIds.add(d.id));
 
     let uploadedCount = 0;
     const batch = writeBatch(db);

@@ -16,7 +16,7 @@ export async function fetchReportsFromServer(): Promise<ReportData[] | null> {
     const snapshot = await getDocs(colRef);
     if (!snapshot.empty) {
       const reports: ReportData[] = [];
-      snapshot.forEach((docSnap) => {
+      snapshot.forEach((docSnap: any) => {
         reports.push(docSnap.data() as ReportData);
       });
       reports.sort((a, b) => {

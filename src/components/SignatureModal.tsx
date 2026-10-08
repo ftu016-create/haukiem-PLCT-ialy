@@ -5,12 +5,8 @@ import {
   PenTool,
   RotateCcw,
   Check,
-  Crop,
   Sparkles,
-  Users,
-  ShieldCheck,
   Trash2,
-  Image as ImageIcon,
 } from 'lucide-react';
 import {
   cleanName,
@@ -18,8 +14,6 @@ import {
   saveCustomMemberSignature,
   resetCustomMemberSignature,
   hasCustomSignature,
-  cleanImageBackground,
-  cropImageArea,
 } from '../utils/signatureService';
 
 interface SignatureModalProps {
@@ -42,8 +36,8 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
   // Toàn bộ danh sách nhân sự cần chữ ký (Trưởng nhóm đặt đầu tiên)
   const allPersonnel = [leaderName, ...members.filter((m) => cleanName(m) !== cleanName(leaderName))];
 
-  // Tab đang mở: 'batch' (Cắt từ ảnh chụp chung) | 'individual' (Tải từng người) | 'draw' (Ký tay)
-  const [activeTab, setActiveTab] = useState<'individual' | 'batch' | 'draw'>(
+  // Tab đang mở: 'individual' (Tải ảnh từng người) | 'draw' (Ký tay trực tiếp)
+  const [activeTab, setActiveTab] = useState<'individual' | 'draw'>(
     initialTargetName ? 'individual' : 'individual'
   );
 
@@ -56,13 +50,6 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const [penColor, setPenColor] = useState<'#1d4ed8' | '#0f172a'>('#1d4ed8');
   const [hasDrawnStrokes, setHasDrawnStrokes] = useState(false);
-
-  // Trạng thái cắt ảnh chung
-  const [batchImageSrc, setBatchImageSrc] = useState<string | null>(null);
-  const batchImgRef = useRef<HTMLImageElement | null>(null);
-  const [cropBox, setCropBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Trạng thái thông báo thành công
@@ -79,9 +66,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
-  // -------------------------------------------------------------
   // Xử lý vẽ tay Canvas
-  // -------------------------------------------------------------
   const initCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -148,133 +133,75 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     const canvas = canvasRef.current;
     if (!canvas || !hasDrawnStrokes) return;
 
-    const dataUrl = canvas.toDataURL('image/png');
-    await saveCustomMemberSignature(selectedPerson, dataUrl);
-    onSignatureUpdated(selectedPerson);
-    showToast(`Đã lưu chữ ký tay thành công cho "${selectedPerson}"!`);
-    initCanvas();
+    setIsProcessing(true);
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      await saveCustomMemberSignature(selectedPerson, dataUrl);
+      onSignatureUpdated(selectedPerson);
+      showToast(`Đã lưu chữ ký vẽ tay cho ${selectedPerson}!`);
+    } catch (e) {
+      console.error(e);
+      alert('Không thể lưu chữ ký vẽ tay.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  // -------------------------------------------------------------
-  // Xử lý tải ảnh riêng lẻ từng người
-  // -------------------------------------------------------------
-  const handleUploadSingleImage = async (personName: string, file: File) => {
-    setIsProcessing(true);
+  // Xử lý nạp ảnh riêng từng người
+  const handleUploadSingle = (person: string, file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Kích thước ảnh không được vượt quá 5MB!');
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = async (e) => {
-      const rawData = e.target?.result as string;
-      if (rawData) {
-        // Tự động làm sạch nền giấy, tách mực
-        const cleaned = await saveCustomMemberSignature(personName, rawData);
-        onSignatureUpdated(personName);
-        setIsProcessing(false);
-        showToast(`Đã tải và xử lý chữ ký thành công cho "${personName}"!`);
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      try {
+        await saveCustomMemberSignature(person, base64);
+        onSignatureUpdated(person);
+        showToast(`Đã cập nhật ảnh chữ ký thực tế cho ${person}!`);
+      } catch (e) {
+        console.error(e);
+        alert('Lỗi khi lưu chữ ký.');
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleResetSingleSignature = (personName: string) => {
-    resetCustomMemberSignature(personName);
-    onSignatureUpdated(personName);
-    showToast(`Đã khôi phục chữ ký chuẩn cho "${personName}"!`);
-  };
-
-  // -------------------------------------------------------------
-  // Xử lý cắt từ ảnh chụp chung (Batch Crop)
-  // -------------------------------------------------------------
-  const handleLoadBatchImage = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const res = e.target?.result as string;
-      if (res) {
-        setBatchImageSrc(res);
-        setCropBox(null);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleBatchMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setDragStart({ x, y });
-    setCropBox({ x, y, width: 0, height: 0 });
-    setIsDraggingCrop(true);
-  };
-
-  const handleBatchMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingCrop || !dragStart) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-
-    const x = Math.min(dragStart.x, currentX);
-    const y = Math.min(dragStart.y, currentY);
-    const width = Math.abs(currentX - dragStart.x);
-    const height = Math.abs(currentY - dragStart.y);
-
-    setCropBox({ x, y, width, height });
-  };
-
-  const handleBatchMouseUp = () => {
-    setIsDraggingCrop(false);
-  };
-
-  const handleApplyCrop = async () => {
-    if (!batchImageSrc || !cropBox || cropBox.width < 10 || cropBox.height < 10 || !batchImgRef.current) return;
-    setIsProcessing(true);
-
-    const imgEl = batchImgRef.current;
-    const croppedDataUrl = await cropImageArea(batchImageSrc, {
-      x: cropBox.x,
-      y: cropBox.y,
-      width: cropBox.width,
-      height: cropBox.height,
-      imgWidth: imgEl.clientWidth,
-      imgHeight: imgEl.clientHeight,
-    });
-
-    await saveCustomMemberSignature(selectedPerson, croppedDataUrl);
-    onSignatureUpdated(selectedPerson);
-    setIsProcessing(false);
-    showToast(`Đã cắt và gán chữ ký thành công cho "${selectedPerson}"!`);
+  const handleResetSingle = (person: string) => {
+    resetCustomMemberSignature(person);
+    onSignatureUpdated(person);
+    showToast(`Đã khôi phục chữ ký gốc mặc định cho ${person}`);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:hidden animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden">
-        {/* Header Modal */}
-        <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-600 text-white shadow-xs">
-              <PenTool className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Quản lý & Chèn chữ ký điện tử
-              </h3>
-              <p className="text-xs text-slate-500">
-                Chữ ký tự động chèn vào báo cáo khi tích chọn tên thành viên hoặc Trưởng nhóm
-              </p>
-            </div>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <PenTool className="w-4 h-4 text-blue-600" />
+              <span>Quản lý Chữ ký Số Tổ Hậu kiểm</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Cập nhật hoặc ký tay chữ ký thực tế cho nhân sự (Chỉ quyền Quản trị viên)
+            </p>
           </div>
-
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Thông báo toast nổi */}
+        {/* Thông báo Toast */}
         {successToast && (
-          <div className="bg-emerald-600 text-white px-4 py-2 text-xs font-semibold flex items-center justify-between transition-all">
-            <span className="flex items-center gap-1.5">
+          <div className="bg-emerald-600 text-white text-xs px-4 py-2 flex items-center justify-between transition animate-in fade-in">
+            <span className="flex items-center gap-1.5 font-medium">
               <Check className="w-4 h-4" />
               {successToast}
             </span>
@@ -295,21 +222,8 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span>Tải ảnh riêng từng người ({allPersonnel.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('batch')}
-            className={`px-3.5 py-2.5 border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'batch'
-                ? 'border-blue-600 text-blue-700 bg-white rounded-t-lg shadow-2xs font-bold'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Crop className="w-4 h-4" />
-            <span>Tải ảnh chung & Cắt vùng chữ ký</span>
+            <Upload className="w-4 h-4" />
+            <span>Tải ảnh chữ ký ({allPersonnel.length})</span>
           </button>
 
           <button
@@ -322,24 +236,21 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             }`}
           >
             <PenTool className="w-4 h-4" />
-            <span>Vẽ tay trực tiếp (Bút cảm ứng / Chuột)</span>
+            <span>Ký tay trực tiếp trên Canvas</span>
           </button>
         </div>
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-5">
-          {/* ========================================================================= */}
-          {/* TAB 1: TẢI ẢNH RIÊNG TỪNG NGƯỜI */}
-          {/* ========================================================================= */}
+          {/* TAB 1: TẢI ẢNH CHỮ KÝ TỪNG NGƯỜI */}
           {activeTab === 'individual' && (
             <div className="space-y-4">
               <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold">Hướng dẫn tải ảnh chữ ký thật:</p>
+                  <p className="font-semibold">Hệ thống đã có sẵn chữ ký thực tế chuẩn của các nhân sự:</p>
                   <p className="text-blue-800 text-[11px] mt-0.5">
-                    Hệ thống tự động lọc nền giấy trắng và làm sắc nét nét mực xanh bi chân thực. Nhấp vào nút{' '}
-                    <b>&ldquo;Tải ảnh&rdquo;</b> bên cạnh tên từng người (bao gồm Trưởng nhóm và các thành viên) để nạp ảnh chữ ký.
+                    Hệ thống tự động chèn chữ ký thực tế của từng người khi tích chọn. Nếu muốn thay đổi ảnh khác, nhấp <b>&ldquo;Tải ảnh&rdquo;</b>.
                   </p>
                 </div>
               </div>
@@ -353,7 +264,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                     <div
                       key={person}
                       className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition ${
-                        isLeader ? 'bg-amber-50/30' : 'bg-white'
+                        isLeader ? 'bg-blue-50/20' : 'bg-white'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -361,46 +272,32 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                           {idx + 1}
                         </span>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs sm:text-sm font-bold text-slate-900">
-                              {person}
-                            </span>
+                          <p className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                            <span>{person}</span>
                             {isLeader && (
-                              <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                TRƯỞNG NHÓM
+                              <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-800 font-bold rounded-md">
+                                Trưởng nhóm
                               </span>
                             )}
-                            {isCustom ? (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                                Ảnh chữ ký riêng
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
-                                Mẫu chuẩn mực xanh
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-400">
-                            Tự động hiển thị khi tích chọn trong báo cáo
-                          </span>
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {isCustom ? 'Đang dùng ảnh chữ ký tải lên riêng' : 'Chữ ký thực tế chuẩn hệ thống'}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Vùng xem trước & Nút thao tác */}
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        {/* Preview Box */}
+                      <div className="flex items-center gap-3 self-end sm:self-center">
+                        {/* Xem trước chữ ký */}
                         <div
-                          className="h-10 w-28 bg-slate-50 border border-slate-200 rounded-lg p-1 flex items-center justify-center overflow-hidden"
-                          title="Xem trước chữ ký"
-                        >
-                          <div
-                            className="max-h-8 max-w-[100px] flex items-center justify-center"
-                            dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg(person) }}
-                          />
-                        </div>
+                          className="h-10 w-28 bg-slate-50 border border-slate-200 rounded-lg p-1 flex items-center justify-center"
+                          dangerouslySetInnerHTML={{ __html: getMemberSignatureSvg(person) }}
+                        />
 
-                        {/* Nút Upload ảnh */}
-                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs transition cursor-pointer">
+                        {/* Nút tải ảnh */}
+                        <label
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 shadow-2xs transition cursor-pointer flex items-center gap-1"
+                          title="Tải ảnh chữ ký"
+                        >
                           <Upload className="w-3.5 h-3.5" />
                           <span>Tải ảnh</span>
                           <input
@@ -408,34 +305,21 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                             accept="image/*"
                             className="hidden"
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleUploadSingleImage(person, file);
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadSingle(person, f);
                             }}
                           />
                         </label>
 
-                        {/* Nút Vẽ nhanh */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPerson(person);
-                            setActiveTab('draw');
-                          }}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 transition cursor-pointer"
-                          title="Ký tay trực tiếp trên canvas"
-                        >
-                          <PenTool className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Nút Khôi phục về mẫu gốc */}
+                        {/* Khôi phục nếu có tùy chỉnh */}
                         {isCustom && (
                           <button
                             type="button"
-                            onClick={() => handleResetSingleSignature(person)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
-                            title="Xóa ảnh riêng, khôi phục chữ ký mẫu"
+                            onClick={() => handleResetSingle(person)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Quay lại chữ ký chuẩn"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <RotateCcw className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -446,166 +330,61 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 2: TẢI ẢNH CHUNG & CẮT VÙNG CHỮ KÝ */}
-          {/* ========================================================================= */}
-          {activeTab === 'batch' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-                <Crop className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Công cụ cắt chữ ký từ bức ảnh chụp chung:</p>
-                  <p className="text-amber-800 text-[11px] mt-0.5">
-                    1. Tải bức ảnh chứa các chữ ký mà anh chụp.
-                    <br />
-                    2. Chọn người nhận chữ ký &rarr; Dùng chuột kéo một khung chữ nhật bao quanh chữ ký của người đó &rarr; Bấm <b>&ldquo;Cắt & Gán chữ ký&rdquo;</b>.
-                  </p>
-                </div>
-              </div>
-
-              {/* Thanh chọn người nhận & nút tải ảnh */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-700">Gán cho:</span>
-                  <select
-                    value={selectedPerson}
-                    onChange={(e) => setSelectedPerson(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    {allPersonnel.map((p) => (
-                      <option key={p} value={p}>
-                        {cleanName(p) === cleanName(leaderName) ? `★ ${p} (TRƯỞNG NHÓM)` : p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs transition cursor-pointer">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{batchImageSrc ? 'Thay ảnh chụp khác' : 'Chọn ảnh chụp danh sách chữ ký'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleLoadBatchImage(file);
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Vùng tương tác kéo cắt */}
-              {batchImageSrc ? (
-                <div className="space-y-3">
-                  <div
-                    onMouseDown={handleBatchMouseDown}
-                    onMouseMove={handleBatchMouseMove}
-                    onMouseUp={handleBatchMouseUp}
-                    className="relative border-2 border-dashed border-blue-400 bg-slate-900/5 rounded-xl overflow-hidden cursor-crosshair select-none flex items-center justify-center max-h-[380px]"
-                  >
-                    <img
-                      ref={batchImgRef}
-                      src={batchImageSrc}
-                      alt="Ảnh danh sách chữ ký"
-                      className="max-h-[380px] w-auto object-contain pointer-events-none"
-                    />
-
-                    {/* Khung kéo cắt (Crop Box) */}
-                    {cropBox && cropBox.width > 5 && cropBox.height > 5 && (
-                      <div
-                        style={{
-                          left: `${cropBox.x}px`,
-                          top: `${cropBox.y}px`,
-                          width: `${cropBox.width}px`,
-                          height: `${cropBox.height}px`,
-                        }}
-                        className="absolute border-2 border-rose-500 bg-rose-500/20 shadow-lg pointer-events-none"
-                      >
-                        <span className="absolute -top-5 left-0 bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          {selectedPerson}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500 italic">
-                      {cropBox && cropBox.width > 10
-                        ? `Đã chọn vùng ${Math.round(cropBox.width)} x ${Math.round(cropBox.height)} px`
-                        : 'Kéo chuột trên ảnh để chọn vùng chữ ký'}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={handleApplyCrop}
-                      disabled={!cropBox || cropBox.width < 10 || isProcessing}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 shadow-xs transition cursor-pointer"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>{isProcessing ? 'Đang xử lý...' : `Cắt & Gán chữ ký cho "${selectedPerson}"`}</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-14 text-center border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 text-slate-400">
-                  <ImageIcon className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">Chưa có ảnh danh sách chữ ký</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Bấm &ldquo;Chọn ảnh chụp danh sách chữ ký&rdquo; ở trên để bắt đầu cắt và gán
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* TAB 3: VẼ TAY TRỰC TIẾP TRÊN CANVAS */}
-          {/* ========================================================================= */}
+          {/* TAB 2: KÝ TAY TRÊN CANVAS */}
           {activeTab === 'draw' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-700">Ký cho:</span>
+                  <label className="text-xs font-bold text-slate-700">Chọn người ký:</label>
                   <select
                     value={selectedPerson}
-                    onChange={(e) => setSelectedPerson(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    onChange={(e) => {
+                      setSelectedPerson(e.target.value);
+                      initCanvas();
+                    }}
+                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:bg-white"
                   >
                     {allPersonnel.map((p) => (
                       <option key={p} value={p}>
-                        {cleanName(p) === cleanName(leaderName) ? `★ ${p} (TRƯỞNG NHÓM)` : p}
+                        {p} {cleanName(p) === cleanName(leaderName) ? '(Trưởng nhóm)' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-semibold">
-                  <span className="text-slate-600">Màu mực:</span>
+                {/* Chọn màu mực */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Màu mực:</span>
                   <button
                     type="button"
                     onClick={() => setPenColor('#1d4ed8')}
-                    className={`w-6 h-6 rounded-full bg-blue-600 border-2 transition cursor-pointer ${
-                      penColor === '#1d4ed8' ? 'border-slate-800 ring-2 ring-blue-300' : 'border-transparent'
+                    className={`px-2 py-1 rounded text-xs font-semibold border transition ${
+                      penColor === '#1d4ed8'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-blue-700 border-blue-200'
                     }`}
-                    title="Mực xanh EVN (#1d4ed8)"
-                  />
+                  >
+                    Mực xanh bi
+                  </button>
                   <button
                     type="button"
                     onClick={() => setPenColor('#0f172a')}
-                    className={`w-6 h-6 rounded-full bg-slate-900 border-2 transition cursor-pointer ${
-                      penColor === '#0f172a' ? 'border-blue-500 ring-2 ring-slate-300' : 'border-transparent'
+                    className={`px-2 py-1 rounded text-xs font-semibold border transition ${
+                      penColor === '#0f172a'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200'
                     }`}
-                    title="Mực đen (#0f172a)"
-                  />
+                  >
+                    Mực đen
+                  </button>
                 </div>
               </div>
 
-              {/* Khung Canvas vẽ */}
-              <div className="border-2 border-slate-300 rounded-2xl bg-white p-2 shadow-inner">
+              {/* Vùng Canvas */}
+              <div className="relative border-2 border-dashed border-slate-300 rounded-2xl bg-white p-2">
                 <canvas
                   ref={canvasRef}
-                  width={680}
+                  width={600}
                   height={220}
                   onMouseDown={startDrawing}
                   onMouseMove={draw}
@@ -614,15 +393,23 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                   onTouchStart={startDrawing}
                   onTouchMove={draw}
                   onTouchEnd={stopDrawing}
-                  className="w-full h-44 border border-dashed border-slate-200 rounded-xl cursor-crosshair touch-none bg-slate-50/30"
+                  className="w-full h-52 bg-white rounded-xl cursor-crosshair touch-none"
                 />
+                {!hasDrawnStrokes && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-xs text-slate-400 italic">
+                      Dùng chuột hoặc bút cảm ứng ký vào đây...
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-between text-xs">
+              {/* Hành động Canvas */}
+              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
                   onClick={initCanvas}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition font-medium flex items-center gap-1.5 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Xóa vẽ lại</span>
@@ -631,11 +418,11 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveDrawnSignature}
-                  disabled={!hasDrawnStrokes}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 shadow-xs transition cursor-pointer"
+                  disabled={!hasDrawnStrokes || isProcessing}
+                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Lưu chữ ký tay cho &ldquo;{selectedPerson}&rdquo;</span>
+                  <span>Lưu chữ ký cho {selectedPerson}</span>
                 </button>
               </div>
             </div>
@@ -643,18 +430,12 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Chữ ký được lưu an toàn trên trình duyệt và tự động chèn khi xuất Word (.doc) & In ấn</span>
-          </div>
-
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
           >
-            Đóng
+            Đóng bảng
           </button>
         </div>
       </div>

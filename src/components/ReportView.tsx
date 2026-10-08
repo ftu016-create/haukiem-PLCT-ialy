@@ -42,6 +42,7 @@ import {
   calculateOverview,
   calculateWorkshopAnalysis,
   getDetailedViolationList,
+  extractDocNumber,
   DEFAULT_RECOMMENDATIONS,
   SUGGESTED_RECOMMENDATIONS_LIST,
   SuggestionItem,
@@ -384,6 +385,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   });
 
   const handleToggleMemberSign = (name: string) => {
+    if (!isAdmin) return;
     setSignedMembers((prev) => {
       const updated = { ...prev, [name]: prev[name] === false ? true : false };
       try {
@@ -394,6 +396,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   };
 
   const handleToggleLeaderSign = () => {
+    if (!isAdmin) return;
     setIsLeaderSigned((prev) => {
       const updated = !prev;
       try {
@@ -403,12 +406,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
     });
   };
 
-  // Modal Quản lý & Cắt / Vẽ chữ ký
+  // Modal Quản lý & Tải / Vẽ chữ ký
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [sigModalTarget, setSigModalTarget] = useState<string | null>(null);
   const [, setSigVersion] = useState(0);
 
   const handleOpenSignatureModal = (targetName?: string) => {
+    if (!isAdmin) return;
     setSigModalTarget(targetName || null);
     setShowSignatureModal(true);
   };
@@ -432,6 +436,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   };
 
   const handleSelectAllMembers = (selected: boolean) => {
+    if (!isAdmin) return;
     setSignedMembers((prev) => {
       const updated = { ...prev };
       auditMembers.forEach((m) => {
@@ -480,8 +485,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
     setSigVersion((v) => v + 1);
   };
 
-  // Modal xem chi tiết danh sách phiếu/lệnh lỗi khi nhấp vào cột biểu đồ
-  const [drilldownType, setDrilldownType] = useState<'PCT' | 'LCT' | 'ALL' | null>(null);
+  const handleResetMemberSignature = (memberName: string) => {
+    resetCustomMemberSignature(memberName);
+    setSigVersion((v) => v + 1);
+  };
+
+  // Modal xem chi tiết danh sách phiếu/lệnh lỗi khi nhấp vào cột biểu đồ hoặc thẻ phân xưởng
+  const [drilldownType, setDrilldownType] = useState<
+    'PCT' | 'LCT' | 'ALL' | 'PXVH_PERSONNEL' | 'PXSC_PERSONNEL' | 'PXVH_DOCS' | 'PXSC_DOCS' | null
+  >(null);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
   const workshopStats = calculateWorkshopAnalysis(activePeriodRecords, personalStats);
@@ -525,6 +537,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
     const allViols = [...pctViolations, ...lctViolations];
     const vhSet = new Set<string>();
     const scSet = new Set<string>();
+    const vhDocs = new Set<string>();
+    const scDocs = new Set<string>();
     let vhCount = 0;
     let scCount = 0;
 
@@ -532,19 +546,12 @@ export const ReportView: React.FC<ReportViewProps> = ({
       if (v.vhialyPerson && v.vhialyPerson !== '/' && !v.vhialyPerson.toLowerCase().includes('chưa rõ')) {
         vhSet.add(v.vhialyPerson);
         vhCount++;
+        vhDocs.add(v.docNumber);
       }
       if (v.pxscPerson && v.pxscPerson !== '/' && !v.pxscPerson.toLowerCase().includes('chưa rõ')) {
         scSet.add(v.pxscPerson);
         scCount++;
-      }
-    });
-
-    const vhDocs = new Set<string>();
-    const scDocs = new Set<string>();
-    activePeriodRecords.forEach((r) => {
-      if (r.result === 'Có sai sót' || r.errorCount > 0 || r.parsedErrors.length > 0) {
-        if (r.issuer || r.approver) vhDocs.add(r.id);
-        if (r.leader || r.workers) scDocs.add(r.id);
+        scDocs.add(v.docNumber);
       }
     });
 
@@ -562,9 +569,251 @@ export const ReportView: React.FC<ReportViewProps> = ({
       vhPercentage: vhPct,
       scPercentage: scPct,
     };
-  }, [pctViolations, lctViolations, activePeriodRecords]);
+  }, [pctViolations, lctViolations]);
 
-  // Danh sách hiển thị trong Modal Drilldown
+  // Dữ liệu chi tiết phục vụ Drilldown xem danh sách Nhân sự & Phiếu vi phạm của từng Phân xưởng
+  const { vhPersonnelList, scPersonnelList, vhDocList, scDocList } = useMemo(() => {
+    const allViols = [...pctViolations, ...lctViolations];
+
+    const vhPersonMap = new Map<string, {
+      name: string;
+      role: string;
+      unit: string;
+      violationCount: number;
+      docs: Array<{
+        docNumber: string;
+        docType: 'PCT' | 'LCT';
+        code: string;
+        jobName: string;
+        date: string;
+        content: string;
+        reason: string;
+      }>;
+    }>();
+
+    const vhDocMap = new Map<string, {
+      docNumber: string;
+      docType: 'PCT' | 'LCT';
+      code: string;
+      jobName: string;
+      unit: string;
+      date: string;
+      issuer: string;
+      approver: string;
+      leader: string;
+      violations: Array<{
+        person: string;
+        content: string;
+        reason: string;
+      }>;
+    }>();
+
+    const scPersonMap = new Map<string, {
+      name: string;
+      role: string;
+      unit: string;
+      violationCount: number;
+      docs: Array<{
+        docNumber: string;
+        docType: 'PCT' | 'LCT';
+        code: string;
+        jobName: string;
+        date: string;
+        content: string;
+        reason: string;
+      }>;
+    }>();
+
+    const scDocMap = new Map<string, {
+      docNumber: string;
+      docType: 'PCT' | 'LCT';
+      code: string;
+      jobName: string;
+      unit: string;
+      date: string;
+      leader: string;
+      workers: string;
+      issuer: string;
+      violations: Array<{
+        person: string;
+        content: string;
+        reason: string;
+      }>;
+    }>();
+
+    allViols.forEach((v) => {
+      const rec = activePeriodRecords.find(
+        (r) => extractDocNumber(r.code) === v.docNumber && r.documentType === v.docType
+      ) || activePeriodRecords.find((r) => r.code.includes(v.docNumber));
+
+      const code = rec?.code || `${v.docType} #${v.docNumber}`;
+      const jobName = rec?.jobName || 'Công tác tại nhà máy Thủy điện Ialy';
+      const date = rec?.auditDate || `Tháng ${reportMonth}/${reportYear}`;
+      const unit = rec?.unit || 'Công ty Thủy điện Ialy';
+
+      // Xử lý PXVH
+      if (v.vhialyPerson && v.vhialyPerson !== '/' && !v.vhialyPerson.toLowerCase().includes('chưa rõ')) {
+        const pName = v.vhialyPerson.trim();
+        let role = 'Cán bộ Vận hành';
+        if (rec) {
+          if (rec.issuer === pName) role = 'Người cấp phiếu';
+          else if (rec.approver === pName) role = 'Người cho phép';
+          else if (rec.orderGiver === pName) role = 'Người ra lệnh';
+        }
+
+        if (!vhPersonMap.has(pName)) {
+          vhPersonMap.set(pName, {
+            name: pName,
+            role,
+            unit: 'Phân xưởng Vận hành (PXVH)',
+            violationCount: 0,
+            docs: [],
+          });
+        }
+        const pObj = vhPersonMap.get(pName)!;
+        pObj.violationCount += 1;
+        pObj.docs.push({
+          docNumber: v.docNumber,
+          docType: v.docType,
+          code,
+          jobName,
+          date,
+          content: v.content,
+          reason: v.reason,
+        });
+
+        // Document map
+        if (!vhDocMap.has(v.docNumber)) {
+          vhDocMap.set(v.docNumber, {
+            docNumber: v.docNumber,
+            docType: v.docType,
+            code,
+            jobName,
+            unit,
+            date,
+            issuer: rec?.issuer || '',
+            approver: rec?.approver || '',
+            leader: rec?.leader || '',
+            violations: [],
+          });
+        }
+        vhDocMap.get(v.docNumber)!.violations.push({
+          person: pName,
+          content: v.content,
+          reason: v.reason,
+        });
+      }
+
+      // Xử lý PXSC
+      if (v.pxscPerson && v.pxscPerson !== '/' && !v.pxscPerson.toLowerCase().includes('chưa rõ')) {
+        const pName = v.pxscPerson.trim();
+        let role = 'Cán bộ Sửa chữa';
+        if (rec) {
+          if (rec.leader === pName) role = 'Người chỉ huy trực tiếp (CHTT)';
+          else if (rec.workers?.includes(pName)) role = 'Nhân viên Đơn vị công tác';
+        }
+
+        if (!scPersonMap.has(pName)) {
+          scPersonMap.set(pName, {
+            name: pName,
+            role,
+            unit: 'Phân xưởng Sửa chữa (PXSC)',
+            violationCount: 0,
+            docs: [],
+          });
+        }
+        const pObj = scPersonMap.get(pName)!;
+        pObj.violationCount += 1;
+        pObj.docs.push({
+          docNumber: v.docNumber,
+          docType: v.docType,
+          code,
+          jobName,
+          date,
+          content: v.content,
+          reason: v.reason,
+        });
+
+        // Document map
+        if (!scDocMap.has(v.docNumber)) {
+          scDocMap.set(v.docNumber, {
+            docNumber: v.docNumber,
+            docType: v.docType,
+            code,
+            jobName,
+            unit,
+            date,
+            leader: rec?.leader || '',
+            workers: rec?.workers || '',
+            issuer: rec?.issuer || '',
+            violations: [],
+          });
+        }
+        scDocMap.get(v.docNumber)!.violations.push({
+          person: pName,
+          content: v.content,
+          reason: v.reason,
+        });
+      }
+    });
+
+    return {
+      vhPersonnelList: Array.from(vhPersonMap.values()),
+      scPersonnelList: Array.from(scPersonMap.values()),
+      vhDocList: Array.from(vhDocMap.values()),
+      scDocList: Array.from(scDocMap.values()),
+    };
+  }, [pctViolations, lctViolations, activePeriodRecords, reportMonth, reportYear]);
+
+  const filteredVhPersonnel = useMemo(() => {
+    if (!modalSearchTerm.trim()) return vhPersonnelList;
+    const q = modalSearchTerm.toLowerCase().trim();
+    return vhPersonnelList.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.role.toLowerCase().includes(q) ||
+        p.docs.some((d) => d.code.toLowerCase().includes(q) || d.content.toLowerCase().includes(q))
+    );
+  }, [vhPersonnelList, modalSearchTerm]);
+
+  const filteredScPersonnel = useMemo(() => {
+    if (!modalSearchTerm.trim()) return scPersonnelList;
+    const q = modalSearchTerm.toLowerCase().trim();
+    return scPersonnelList.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.role.toLowerCase().includes(q) ||
+        p.docs.some((d) => d.code.toLowerCase().includes(q) || d.content.toLowerCase().includes(q))
+    );
+  }, [scPersonnelList, modalSearchTerm]);
+
+  const filteredVhDocs = useMemo(() => {
+    if (!modalSearchTerm.trim()) return vhDocList;
+    const q = modalSearchTerm.toLowerCase().trim();
+    return vhDocList.filter(
+      (d) =>
+        d.code.toLowerCase().includes(q) ||
+        d.jobName.toLowerCase().includes(q) ||
+        d.issuer.toLowerCase().includes(q) ||
+        d.approver.toLowerCase().includes(q) ||
+        d.violations.some((v) => v.content.toLowerCase().includes(q) || v.person.toLowerCase().includes(q))
+    );
+  }, [vhDocList, modalSearchTerm]);
+
+  const filteredScDocs = useMemo(() => {
+    if (!modalSearchTerm.trim()) return scDocList;
+    const q = modalSearchTerm.toLowerCase().trim();
+    return scDocList.filter(
+      (d) =>
+        d.code.toLowerCase().includes(q) ||
+        d.jobName.toLowerCase().includes(q) ||
+        d.leader.toLowerCase().includes(q) ||
+        d.workers.toLowerCase().includes(q) ||
+        d.violations.some((v) => v.content.toLowerCase().includes(q) || v.person.toLowerCase().includes(q))
+    );
+  }, [scDocList, modalSearchTerm]);
+
+  // Danh sách hiển thị trong Modal Drilldown cho PCT, LCT, ALL
   const activeModalRecords = useMemo(() => {
     let baseList: NormalizedRecord[] = [];
     if (drilldownType === 'PCT') baseList = pctErrorList;
@@ -612,8 +861,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
+            size: A4 landscape;
             margin: 20mm 20mm 20mm 30mm !important; /* trên: 2cm, phải: 2cm, dưới: 2cm, trái: 3cm */
+          }
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
           }
           body, html {
             background-color: #ffffff !important;
@@ -632,7 +886,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
             font-family: 'Times New Roman', Times, serif !important;
             font-size: 13pt !important;
           }
-          table {
+          table.data-table {
             border-collapse: collapse !important;
             width: 100% !important;
             font-family: 'Times New Roman', Times, serif !important;
@@ -641,27 +895,22 @@ export const ReportView: React.FC<ReportViewProps> = ({
             margin-top: 6pt !important;
             margin-bottom: 12pt !important;
           }
-          tr {
+          table.data-table tr {
             page-break-inside: avoid;
             page-break-after: auto;
           }
-          thead, tbody, tr {
-            background-color: transparent !important;
-            background: transparent !important;
-          }
-          th, td {
+          table.data-table th, table.data-table td {
             font-family: 'Times New Roman', Times, serif !important;
             font-size: 13pt !important;
             border: 1px solid #000000 !important;
             color: #000000 !important;
-            background-color: transparent !important;
-            background: transparent !important;
             padding: 5pt 7pt !important;
             line-height: 1.35 !important;
           }
-          th {
+          table.data-table th {
             font-weight: bold !important;
             text-align: center !important;
+            background-color: #f1f5f9 !important;
           }
           input, textarea {
             border: none !important;
@@ -769,11 +1018,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
       </div>
 
-      {/* Official Corporate Report Layout */}
-      <div className="print-paper bg-white rounded-2xl border border-slate-200 p-8 shadow-xs max-w-5xl mx-auto print:border-none print:shadow-none print:p-0">
-        {/* Formal Corporate Header */}
+      {/* Official Corporate Report Layout (Chuẩn Khổ A4 Ngang - Landscape 297mm x 210mm) */}
+      <div className="print-paper bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 lg:pl-[30mm] lg:pr-[20mm] lg:pt-[20mm] lg:pb-[20mm] shadow-xs max-w-[1150px] w-full mx-auto print:max-w-none print:w-full print:border-none print:shadow-none print:p-0">
+        {/* Formal Corporate Header (Cỡ chữ 12pt theo quy định) */}
         <div className="flex justify-between items-start pb-4 mb-6">
-          <div className="text-center w-[40%]">
+          <div className="text-center w-[44%]">
             <p className="font-bold uppercase text-slate-800 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               CÔNG TY THỦY ĐIỆN IALY
             </p>
@@ -783,7 +1032,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
             <div className="w-24 sm:w-28 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
           </div>
 
-          <div className="text-center w-[60%]">
+          <div className="text-center w-[56%]">
             <p className="font-bold uppercase text-slate-800 print:text-black whitespace-nowrap text-xs sm:text-[12pt] print:text-[12pt] leading-tight">
               CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
             </p>
@@ -791,46 +1040,56 @@ export const ReportView: React.FC<ReportViewProps> = ({
               Độc lập - Tự do - Hạnh phúc
             </p>
             <div className="w-28 sm:w-36 border-b border-slate-900 mx-auto mt-1 print:border-black"></div>
-            {/* Dòng ngày tháng: Cỡ chữ 13pt theo quy định */}
+            {/* Dòng ngày tháng: Cỡ chữ 13pt theo quy định - Chỉ Admin mới điền được */}
             <div className="mt-1.5 flex items-center justify-center gap-1 text-xs sm:text-[13pt] print:text-[13pt] text-slate-700 print:text-black italic">
               <span>Gia Lai, ngày</span>
-              <input
-                type="text"
-                value={docDay}
-                onChange={(e) => handleUpdateDocDate('day', e.target.value)}
-                placeholder="..."
-                maxLength={2}
-                title="Nhập ngày lập báo cáo (ví dụ: 15)"
-                className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
-              />
-              <span>tháng</span>
-              <input
-                type="text"
-                value={docMonth}
-                onChange={(e) => handleUpdateDocDate('month', e.target.value)}
-                placeholder="..."
-                maxLength={2}
-                title="Nhập tháng lập báo cáo (ví dụ: 09)"
-                className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
-              />
-              <span>năm</span>
-              <input
-                type="text"
-                value={docYear}
-                onChange={(e) => handleUpdateDocDate('year', e.target.value)}
-                placeholder="202..."
-                maxLength={4}
-                title="Nhập năm lập báo cáo (ví dụ: 2026)"
-                className="w-14 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
-              />
-              <button
-                type="button"
-                onClick={handleSetToday}
-                title="Điền nhanh ngày hôm nay"
-                className="ml-1 px-1.5 py-0.5 text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition cursor-pointer not-italic print:hidden font-medium"
-              >
-                Hôm nay
-              </button>
+              {isAdmin ? (
+                <>
+                  <input
+                    type="text"
+                    value={docDay}
+                    onChange={(e) => handleUpdateDocDate('day', e.target.value)}
+                    placeholder="..."
+                    maxLength={2}
+                    title="Nhập ngày lập báo cáo (ví dụ: 15)"
+                    className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs sm:text-[13pt] text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+                  />
+                  <span>tháng</span>
+                  <input
+                    type="text"
+                    value={docMonth}
+                    onChange={(e) => handleUpdateDocDate('month', e.target.value)}
+                    placeholder="..."
+                    maxLength={2}
+                    title="Nhập tháng lập báo cáo (ví dụ: 09)"
+                    className="w-8 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs sm:text-[13pt] text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+                  />
+                  <span>năm</span>
+                  <input
+                    type="text"
+                    value={docYear}
+                    onChange={(e) => handleUpdateDocDate('year', e.target.value)}
+                    placeholder="2026"
+                    maxLength={4}
+                    title="Nhập năm lập báo cáo (ví dụ: 2026)"
+                    className="w-14 text-center font-semibold bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-300 focus:border-blue-500 rounded px-1 py-0.5 text-xs sm:text-[13pt] text-slate-800 not-italic focus:outline-hidden transition print:border-none print:bg-transparent print:p-0 print:w-auto print:font-normal print:italic"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSetToday}
+                    title="Điền nhanh ngày hôm nay"
+                    className="ml-1 px-1.5 py-0.5 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition cursor-pointer not-italic print:hidden font-medium"
+                  >
+                    Hôm nay
+                  </button>
+                </>
+              ) : (
+                <span>
+                  {docDay ? (docDay.length === 1 ? '0' + docDay : docDay) : '.....'} tháng{' '}
+                  {docMonth ? (docMonth.length === 1 ? '0' + docMonth : docMonth) : '.....'} năm{' '}
+                  {docYear || '2026'}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -840,7 +1099,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <h1 className="text-xl sm:text-2xl font-black uppercase text-slate-900 print:text-black tracking-tight">
             BÁO CÁO
           </h1>
-          <p className="text-sm sm:text-base font-bold text-slate-800 print:text-black mt-1">
+          <p className="text-sm sm:text-[13pt] font-bold text-slate-800 print:text-black mt-1">
             Về việc kết quả hậu kiểm PCT, LCT {reportType === 'month' ? `tháng ${reportMonth < 10 ? '0' + reportMonth : reportMonth}/${reportYear}` : `năm ${reportYear}`}
           </p>
         </div>
@@ -850,14 +1109,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* ========================================================================= */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+            <h3 className="text-sm sm:text-[13pt] print:text-[13pt] font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
               <span><b>I. Việc thực hiện PCT:</b></span>
             </h3>
           </div>
 
-          {/* Bảng danh sách chi tiết các phiếu công tác có nội dung không phù hợp (Có STT và Ghi chú) */}
+          {/* Bảng danh sách chi tiết các phiếu công tác có nội dung không phù hợp (Có STT và Ghi chú - Cỡ chữ 13pt) */}
           <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs sm:text-[13pt] print:text-[13pt] leading-snug">
               <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
                 <tr>
                   <th rowSpan={2} className="py-2.5 px-2 text-center border-r border-slate-300 print:border-black w-10">
@@ -932,14 +1191,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* ========================================================================= */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+            <h3 className="text-sm sm:text-[13pt] print:text-[13pt] font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
               <span><b>II. Việc thực hiện LCT:</b></span>
             </h3>
           </div>
 
-          {/* Bảng danh sách chi tiết các lệnh công tác có nội dung không phù hợp (Có STT và Ghi chú) */}
+          {/* Bảng danh sách chi tiết các lệnh công tác có nội dung không phù hợp (Có STT và Ghi chú - Cỡ chữ 13pt) */}
           <div className="border border-slate-300 rounded-lg overflow-x-auto print:border-black mb-4">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs sm:text-[13pt] print:text-[13pt] leading-snug">
               <thead className="bg-slate-100 font-bold border-b border-slate-300 text-slate-800 print:bg-transparent print:border-black print:text-black">
                 <tr>
                   <th rowSpan={2} className="py-2.5 px-2 text-center border-r border-slate-300 print:border-black w-10">
@@ -1022,7 +1281,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             {/* Thẻ biểu đồ cột PCT */}
-            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 print:bg-transparent print:border-slate-300">
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 print:bg-blue-50/40 print:border-blue-300">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
                   Phiếu công tác (PCT)
@@ -1032,41 +1291,43 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
-                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-blue-200">
                   <div className="text-[10px] text-slate-500">Tổng cấp</div>
                   <div className="text-base font-black text-slate-900 font-mono">{activePeriodOverview.totalPCT}</div>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-blue-200">
                   <div className="text-[10px] text-emerald-600">Hợp lệ</div>
                   <div className="text-base font-black text-emerald-600 font-mono">{activePeriodOverview.pctValid}</div>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 print:border-blue-200">
                   <div className="text-[10px] text-rose-600">Có lỗi</div>
                   <div className="text-base font-black text-rose-600 font-mono">{activePeriodOverview.pctWithErrors}</div>
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
-                  <span>Tiến độ hợp lệ</span>
-                  <span>{100 - Number(pctErrorRate)}%</span>
+                <div className="flex justify-between text-[11px] font-medium">
+                  <span className="text-emerald-700">Hợp lệ: {100 - Number(pctErrorRate)}% ({activePeriodOverview.pctValid} phiếu)</span>
+                  <span className="text-rose-600 font-semibold">Có lỗi: {pctErrorRate}% ({activePeriodOverview.pctWithErrors} phiếu)</span>
                 </div>
-                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex gap-0.5 p-0.5">
                   <div
                     style={{ width: `${activePeriodOverview.totalPCT > 0 ? (activePeriodOverview.pctValid / activePeriodOverview.totalPCT) * 100 : 100}%` }}
-                    className="bg-emerald-500 h-full"
+                    className="bg-emerald-500 h-full rounded-full transition-all"
                     title="Hợp lệ"
                   ></div>
-                  <div
-                    style={{ width: `${Number(pctErrorRate)}%` }}
-                    className="bg-rose-500 h-full"
-                    title="Có lỗi"
-                  ></div>
+                  {Number(pctErrorRate) > 0 && (
+                    <div
+                      style={{ width: `${Number(pctErrorRate)}%` }}
+                      className="bg-rose-500 h-full rounded-full transition-all"
+                      title="Có lỗi"
+                    ></div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Thẻ biểu đồ cột LCT */}
-            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 print:bg-transparent print:border-slate-300">
+            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 print:bg-emerald-50/40 print:border-emerald-300">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">
                   Lệnh công tác (LCT)
@@ -1076,35 +1337,37 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
-                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-emerald-200">
                   <div className="text-[10px] text-slate-500">Tổng cấp</div>
                   <div className="text-base font-black text-slate-900 font-mono">{activePeriodOverview.totalLCT}</div>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-emerald-200">
                   <div className="text-[10px] text-emerald-600">Hợp lệ</div>
                   <div className="text-base font-black text-emerald-600 font-mono">{activePeriodOverview.lctValid}</div>
                 </div>
-                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-slate-200">
+                <div className="bg-white p-2 rounded-lg border border-emerald-100 print:border-emerald-200">
                   <div className="text-[10px] text-rose-600">Có lỗi</div>
                   <div className="text-base font-black text-rose-600 font-mono">{activePeriodOverview.lctWithErrors}</div>
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
-                  <span>Tiến độ hợp lệ</span>
-                  <span>{100 - Number(lctErrorRate)}%</span>
+                <div className="flex justify-between text-[11px] font-medium">
+                  <span className="text-emerald-700">Hợp lệ: {100 - Number(lctErrorRate)}% ({activePeriodOverview.lctValid} lệnh)</span>
+                  <span className="text-rose-600 font-semibold">Có lỗi: {lctErrorRate}% ({activePeriodOverview.lctWithErrors} lệnh)</span>
                 </div>
-                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex gap-0.5 p-0.5">
                   <div
                     style={{ width: `${activePeriodOverview.totalLCT > 0 ? (activePeriodOverview.lctValid / activePeriodOverview.totalLCT) * 100 : 100}%` }}
-                    className="bg-emerald-500 h-full"
+                    className="bg-emerald-500 h-full rounded-full transition-all"
                     title="Hợp lệ"
                   ></div>
-                  <div
-                    style={{ width: `${Number(lctErrorRate)}%` }}
-                    className="bg-rose-500 h-full"
-                    title="Có lỗi"
-                  ></div>
+                  {Number(lctErrorRate) > 0 && (
+                    <div
+                      style={{ width: `${Number(lctErrorRate)}%` }}
+                      className="bg-rose-500 h-full rounded-full transition-all"
+                      title="Có lỗi"
+                    ></div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1112,144 +1375,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* BIỂU ĐỒ SO SÁNH SỐ NGƯỜI VÀ VI PHẠM THEO PHÂN XƯỞNG (PXVH vs PXSC) */}
+        {/* TỶ LỆ VI PHẠM: 3 CỘT BIỂU ĐỒ PHẦN TRĂM DẠNG TRÒN TRỰC QUAN (Ngay dưới PCT vs LCT) */}
         {/* ========================================================================= */}
         <div className="mb-8 pt-2">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5 print:text-[13pt]">
-              <Users className="w-4 h-4 text-blue-600 print:hidden" />
-              <span>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</span>
-            </h4>
-          </div>
-
-          {/* Hai thẻ đối sánh trực quan 2 phân xưởng PXVH và PXSC */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-            {/* Phân xưởng Vận hành (PXVH) */}
-            <div className="p-4 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-blue-100/30 print:bg-transparent print:border-black shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-                  Phân xưởng Vận hành (PXVH)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-xs font-black shadow-xs">
-                  {vhPercentage}%
-                </span>
-              </div>
-
-              {/* Thanh tỷ lệ vi phạm PXVH */}
-              <div className="w-full bg-blue-200/70 h-2.5 rounded-full overflow-hidden mb-3.5">
-                <div
-                  style={{ width: `${vhPercentage}%` }}
-                  className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                ></div>
-              </div>
-
-              {/* 3 chỉ số then chốt */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-slate-500">Nhân sự vi phạm</div>
-                  <div className="text-base font-black text-blue-950 font-mono mt-0.5">
-                    {vhPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
-                  </div>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-slate-500">Phiếu/lệnh vi phạm</div>
-                  <div className="text-base font-black text-blue-950 font-mono mt-0.5">
-                    {vhDocsCount}
-                  </div>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-rose-600 font-medium">Tổng số lỗi</div>
-                  <div className="text-base font-black text-rose-600 font-mono mt-0.5">
-                    {vhViolationCount}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Phân xưởng Sửa chữa (PXSC) */}
-            <div className="p-4 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-amber-100/30 print:bg-transparent print:border-black shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
-                  Phân xưởng Sửa chữa (PXSC)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-xs font-black shadow-xs">
-                  {scPercentage}%
-                </span>
-              </div>
-
-              {/* Thanh tỷ lệ vi phạm PXSC */}
-              <div className="w-full bg-amber-200/70 h-2.5 rounded-full overflow-hidden mb-3.5">
-                <div
-                  style={{ width: `${scPercentage}%` }}
-                  className="bg-amber-600 h-full rounded-full transition-all duration-500"
-                ></div>
-              </div>
-
-              {/* 3 chỉ số then chốt */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-slate-500">Nhân sự vi phạm</div>
-                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">
-                    {scPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
-                  </div>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-slate-500">Phiếu/lệnh vi phạm</div>
-                  <div className="text-base font-black text-amber-950 font-mono mt-0.5">
-                    {scDocsCount}
-                  </div>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-amber-100 shadow-2xs print:border-black">
-                  <div className="text-[10px] text-rose-600 font-medium">Tổng số lỗi</div>
-                  <div className="text-base font-black text-rose-600 font-mono mt-0.5">
-                    {scViolationCount}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Thanh tương quan tỷ lệ vi phạm toàn phân xưởng */}
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-6 print:border-black print:bg-transparent">
-            <div className="flex items-center justify-between text-xs font-bold mb-2 text-slate-700">
-              <span className="flex items-center gap-1.5 text-blue-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-                PXVH: {vhPercentage}% ({vhViolationCount} lỗi)
-              </span>
-              <span className="text-[11px] text-slate-500 font-medium">
-                Tương quan phân bổ vi phạm (100%)
-              </span>
-              <span className="flex items-center gap-1.5 text-amber-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
-                PXSC: {scPercentage}% ({scViolationCount} lỗi)
-              </span>
-            </div>
-            <div className="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-              <div
-                style={{ width: `${vhPercentage}%` }}
-                className="bg-blue-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
-              >
-                {vhPercentage > 10 && `PXVH ${vhPercentage}%`}
-              </div>
-              <div
-                style={{ width: `${scPercentage}%` }}
-                className="bg-amber-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
-              >
-                {scPercentage > 10 && `PXSC ${scPercentage}%`}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Cột Biểu đồ phần trăm dạng tròn trực quan có màu */}
-        <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 print:text-black">
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
-              <span><b>Tỷ lệ vi phạm:</b></span>
-            </h3>
+              <span>* <b>Tỷ lệ vi phạm:</b></span>
+            </h4>
             <span className="text-[11px] text-slate-500 italic print:hidden">
               (Nhấp vào từng cột để mở danh sách chi tiết các phiếu, lệnh vi phạm)
             </span>
@@ -1262,7 +1395,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 setDrilldownType('PCT');
                 setModalSearchTerm('');
               }}
-              className="bg-white rounded-xl border-2 border-blue-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
+              className="bg-white rounded-xl border-2 border-blue-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-2 print:border-blue-600 print:shadow-none print:p-3 print:bg-white"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1320,7 +1453,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 setDrilldownType('LCT');
                 setModalSearchTerm('');
               }}
-              className="bg-white rounded-xl border-2 border-emerald-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
+              className="bg-white rounded-xl border-2 border-emerald-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-2 print:border-emerald-600 print:shadow-none print:p-3 print:bg-white"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1378,7 +1511,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 setDrilldownType('ALL');
                 setModalSearchTerm('');
               }}
-              className="bg-white rounded-xl border-2 border-rose-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-none print:shadow-none print:p-0"
+              className="bg-white rounded-xl border-2 border-rose-600 hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group print:border-2 print:border-rose-600 print:shadow-none print:p-3 print:bg-white"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1433,12 +1566,247 @@ export const ReportView: React.FC<ReportViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
+        {/* BIỂU ĐỒ SO SÁNH SỐ NGƯỜI VÀ VI PHẠM THEO PHÂN XƯỞNG (PXVH vs PXSC) */}
+        {/* ========================================================================= */}
+        <div className="mb-8 pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5 print:text-[13pt]">
+              <Users className="w-4 h-4 text-blue-600 print:hidden" />
+              <span>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</span>
+            </h4>
+            <span className="text-[11px] text-slate-500 italic print:hidden">
+              (Nhấp vào ô nhân sự hoặc ô phiếu vi phạm để xem danh sách chi tiết)
+            </span>
+          </div>
+
+          {/* Hai thẻ đối sánh trực quan 2 phân xưởng PXVH và PXSC */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+            {/* Phân xưởng Vận hành (PXVH) */}
+            <div className="p-4 sm:p-5 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-blue-100/30 print:bg-blue-50/80 print:border-blue-300 shadow-2xs">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs sm:text-sm font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                  Phân xưởng Vận hành (PXVH)
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-blue-600 text-white text-[11px] font-black shadow-xs">
+                  Tỷ trọng: {vhPercentage}% tổng lỗi
+                </span>
+              </div>
+
+              {/* Thanh tỷ trọng vi phạm PXVH */}
+              <div className="space-y-1 mb-4">
+                <div className="flex justify-between text-[11px] text-blue-900/80 font-medium">
+                  <span>Phần lỗi thuộc PXVH ({vhViolationCount}/{Math.max(vhViolationCount + scViolationCount, 1)} lỗi)</span>
+                  <span className="font-bold">{vhPercentage}%</span>
+                </div>
+                <div className="w-full bg-blue-200/80 h-3 rounded-full overflow-hidden">
+                  <div
+                    style={{ width: `${vhPercentage}%` }}
+                    className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                  ></div>
+                </div>
+              </div>
+
+              {/* 3 chỉ số then chốt PXVH (Có thể nhấp để xem danh sách chi tiết) */}
+              <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                {/* 1. Nhân sự vi phạm */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXVH_PERSONNEL');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-blue-100 shadow-2xs print:border-blue-200 hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem danh sách chi tiết nhân sự vi phạm của PXVH"
+                >
+                  <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
+                    <span>Nhân sự vi phạm</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-blue-500 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-blue-950 font-mono">
+                    {vhPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-blue-600 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem danh sách
+                  </div>
+                </div>
+
+                {/* 2. Phiếu/lệnh vi phạm */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXVH_DOCS');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-blue-100 shadow-2xs print:border-blue-200 hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem danh sách chi tiết các phiếu/lệnh vi phạm của PXVH"
+                >
+                  <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
+                    <span>Phiếu/lệnh vi phạm</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-blue-500 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-blue-950 font-mono">
+                    {vhDocsCount} <span className="text-[10px] font-normal text-slate-500">phiếu</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-blue-600 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem danh sách
+                  </div>
+                </div>
+
+                {/* 3. Tổng số lỗi */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXVH_DOCS');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-blue-100 shadow-2xs print:border-blue-200 hover:border-rose-400 hover:bg-rose-50/40 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem chi tiết các lỗi sai sót của PXVH"
+                >
+                  <div className="text-[10px] text-rose-600 font-medium mb-0.5 flex items-center justify-center gap-1">
+                    <span>Tổng số lỗi</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-rose-500 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-rose-600 font-mono">
+                    {vhViolationCount} <span className="text-[10px] font-normal text-rose-600">lỗi</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-rose-600 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem chi tiết
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Phân xưởng Sửa chữa (PXSC) */}
+            <div className="p-4 sm:p-5 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-amber-100/30 print:bg-amber-50/80 print:border-amber-300 shadow-2xs">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs sm:text-sm font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                  Phân xưởng Sửa chữa (PXSC)
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-amber-600 text-white text-[11px] font-black shadow-xs">
+                  Tỷ trọng: {scPercentage}% tổng lỗi
+                </span>
+              </div>
+
+              {/* Thanh tỷ trọng vi phạm PXSC */}
+              <div className="space-y-1 mb-4">
+                <div className="flex justify-between text-[11px] text-amber-900/80 font-medium">
+                  <span>Phần lỗi thuộc PXSC ({scViolationCount}/{Math.max(vhViolationCount + scViolationCount, 1)} lỗi)</span>
+                  <span className="font-bold">{scPercentage}%</span>
+                </div>
+                <div className="w-full bg-amber-200/80 h-3 rounded-full overflow-hidden">
+                  <div
+                    style={{ width: `${scPercentage}%` }}
+                    className="bg-amber-600 h-full rounded-full transition-all duration-500"
+                  ></div>
+                </div>
+              </div>
+
+              {/* 3 chỉ số then chốt PXSC (Có thể nhấp để xem danh sách chi tiết) */}
+              <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                {/* 1. Nhân sự vi phạm */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXSC_PERSONNEL');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-amber-100 shadow-2xs print:border-amber-200 hover:border-amber-500 hover:bg-amber-50/50 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem danh sách chi tiết nhân sự vi phạm của PXSC"
+                >
+                  <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
+                    <span>Nhân sự vi phạm</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-amber-600 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-amber-950 font-mono">
+                    {scPersonsSet.size} <span className="text-[10px] font-normal text-slate-500">người</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-amber-700 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem danh sách
+                  </div>
+                </div>
+
+                {/* 2. Phiếu/lệnh vi phạm */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXSC_DOCS');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-amber-100 shadow-2xs print:border-amber-200 hover:border-amber-500 hover:bg-amber-50/50 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem danh sách chi tiết các phiếu/lệnh vi phạm của PXSC"
+                >
+                  <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
+                    <span>Phiếu/lệnh vi phạm</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-amber-600 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-amber-950 font-mono">
+                    {scDocsCount} <span className="text-[10px] font-normal text-slate-500">phiếu</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-amber-700 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem danh sách
+                  </div>
+                </div>
+
+                {/* 3. Tổng số lỗi */}
+                <div
+                  onClick={() => {
+                    setDrilldownType('PXSC_DOCS');
+                    setModalSearchTerm('');
+                  }}
+                  className="bg-white p-2.5 rounded-lg border border-amber-100 shadow-2xs print:border-amber-200 hover:border-rose-400 hover:bg-rose-50/40 hover:shadow-xs transition cursor-pointer group"
+                  title="Nhấp để xem chi tiết các lỗi sai sót của PXSC"
+                >
+                  <div className="text-[10px] text-rose-600 font-medium mb-0.5 flex items-center justify-center gap-1">
+                    <span>Tổng số lỗi</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-rose-500 opacity-60 group-hover:opacity-100" />
+                  </div>
+                  <div className="text-base font-black text-rose-600 font-mono">
+                    {scViolationCount} <span className="text-[10px] font-normal text-rose-600">lỗi</span>
+                  </div>
+                  <div className="text-[9px] font-semibold text-rose-600 mt-1 opacity-80 group-hover:opacity-100 group-hover:underline">
+                    Xem chi tiết
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Thanh tương quan tỷ lệ vi phạm toàn phân xưởng */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 print:border-slate-300 print:bg-slate-50">
+            <div className="flex items-center justify-between text-xs font-bold mb-2.5 text-slate-700">
+              <span className="flex items-center gap-1.5 text-blue-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                PXVH: {vhPercentage}% ({vhViolationCount} lỗi)
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Tương quan phân bổ vi phạm (100%)
+              </span>
+              <span className="flex items-center gap-1.5 text-amber-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                PXSC: {scPercentage}% ({scViolationCount} lỗi)
+              </span>
+            </div>
+            <div className="h-6 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
+              <div
+                style={{ width: `${vhPercentage}%` }}
+                className="bg-blue-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
+              >
+                {vhPercentage > 10 && `PXVH ${vhPercentage}%`}
+              </div>
+              <div
+                style={{ width: `${scPercentage}%` }}
+                className="bg-amber-600 h-full transition-all duration-500 flex items-center justify-center text-[10px] text-white font-bold tracking-wider"
+              >
+                {scPercentage > 10 && `PXSC ${scPercentage}%`}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
         {/* MỤC III: ĐÁNH GIÁ & KIẾN NGHỊ (Chỉ Admin mới có quyền chỉnh sửa, Khách chỉ xem) */}
         {/* ========================================================================= */}
         <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 print:text-black">
+              <h3 className="text-sm sm:text-[13pt] print:text-[13pt] font-bold text-slate-900 print:text-black">
                 <b>III. Đánh giá & Kiến nghị:</b>
               </h3>
               {isAdmin ? (
@@ -1597,7 +1965,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
         <div className="my-8 pt-6 border-t border-slate-200 print:border-none print:pt-2 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
             <div>
-              <h4 className="font-bold text-xs sm:text-sm print:text-[13pt] text-slate-900 print:text-black">
+              <h4 className="font-bold text-sm sm:text-[13pt] print:text-[13pt] text-slate-900 print:text-black">
                 <b>Các thành viên tham gia hậu kiểm:</b>
                 <span className="text-[11px] text-slate-500 font-normal italic ml-2 print:hidden">
                   ({auditMembers.length} thành viên)
@@ -1706,20 +2074,21 @@ export const ReportView: React.FC<ReportViewProps> = ({
                         type="checkbox"
                         checked={isSigned}
                         onChange={() => handleToggleMemberSign(name)}
-                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                        disabled={!isAdmin}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                       />
-                      <span className="font-bold text-slate-800 text-xs sm:text-sm">
+                      <span className="font-bold text-slate-800 text-xs sm:text-[13pt]">
                         <span className="text-slate-400 mr-1">{idx + 1}.</span>
                         {name}
                       </span>
                     </label>
 
-                    {/* Chỉ quyền admin mới được tải ảnh, ký tay, sửa, xóa thành viên */}
+                    {/* Chỉ quyền admin mới được tải ảnh hoặc xóa thành viên */}
                     {isAdmin && (
                       <div className="flex items-center gap-1.5">
                         {/* Nút tải ảnh chữ ký thật từ máy */}
                         <label
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 shadow-2xs transition cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 shadow-2xs transition cursor-pointer"
                           title={`Tải file ảnh chữ ký thực tế cho ${name}`}
                         >
                           <Upload className="w-3 h-3 text-blue-600" />
@@ -1735,21 +2104,23 @@ export const ReportView: React.FC<ReportViewProps> = ({
                           />
                         </label>
 
-                        {/* Nút Ký tay / Mở modal */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSignatureModal(name)}
-                          className="p-1 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 transition cursor-pointer"
-                          title={`Ký tay hoặc cắt chữ ký cho ${name}`}
-                        >
-                          <PenTool className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Nút khôi phục chữ ký gốc nếu đã tải ảnh */}
+                        {hasCustomSignature(name) && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetMemberSignature(name)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            title={`Khôi phục chữ ký gốc của ${name}`}
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        )}
 
-                        {/* Xóa thành viên (Admin) */}
+                        {/* Xóa thành viên khỏi danh sách kiểm tra (Admin) */}
                         <button
                           type="button"
                           onClick={() => handleDeleteMember(idx)}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
                           title={`Xóa ${name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1851,27 +2222,28 @@ export const ReportView: React.FC<ReportViewProps> = ({
               (Ký, ghi rõ họ tên)
             </p>
 
-            {/* Bảng điều khiển chức năng chữ ký Trưởng nhóm trên Web */}
-            <div className="print:hidden my-2 p-2 bg-amber-50/80 border border-amber-200/90 rounded-xl flex flex-col gap-1.5 shadow-2xs">
-              <label className="flex items-center justify-center gap-2 text-xs font-bold text-amber-950 cursor-pointer select-none">
+            {/* Bảng điều khiển chức năng chữ ký Trưởng nhóm trên Web - Tối giản, gọn gàng */}
+            <div className="print:hidden my-2 py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-2 max-w-[220px] mx-auto">
+              <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={isLeaderSigned}
                   onChange={handleToggleLeaderSign}
-                  className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
+                  disabled={!isAdmin}
+                  className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                 />
-                <span>Tự động chèn chữ ký Trưởng nhóm</span>
+                <span>Chèn chữ ký</span>
               </label>
 
-              {/* Chỉ quyền Admin mới được tải ảnh hoặc ký tay Trưởng nhóm */}
+              {/* Chỉ quyền Admin mới được tải ảnh hoặc khôi phục */}
               {isAdmin && (
-                <div className="flex items-center justify-center gap-1.5 pt-1 border-t border-amber-200/60">
+                <div className="flex items-center gap-1">
                   {/* Nút tải ảnh chữ ký thật từ máy */}
                   <label
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 shadow-2xs transition cursor-pointer"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 transition cursor-pointer"
                     title="Tải ảnh chụp chữ ký thực tế cho Trưởng nhóm"
                   >
-                    <Upload className="w-3 h-3 text-amber-700" />
+                    <Upload className="w-2.5 h-2.5 text-blue-600" />
                     <span>Tải ảnh</span>
                     <input
                       type="file"
@@ -1884,26 +2256,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     />
                   </label>
 
-                  {/* Nút Ký tay Canvas */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSignatureModal('Trần Thanh Chương')}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 shadow-2xs transition cursor-pointer"
-                    title="Mở bảng ký tay trực tiếp hoặc cắt ảnh cho Trưởng nhóm"
-                  >
-                    <PenTool className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Ký tay / Cắt ảnh</span>
-                  </button>
-
                   {/* Nút xóa ảnh tải lên quay về mẫu gốc */}
                   {hasCustomSignature('Trần Thanh Chương') && (
                     <button
                       type="button"
                       onClick={handleResetLeaderSignature}
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                      title="Khôi phục chữ ký mẫu ban đầu của Trưởng nhóm"
+                      className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      title="Khôi phục chữ ký gốc mặc định của Trưởng nhóm"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <RotateCcw className="w-3 h-3" />
                     </button>
                   )}
                 </div>
@@ -1934,7 +2295,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL CHI TIẾT DANH SÁCH PHIẾU/LỆNH LỖI KHI NHẤP VÀO CỘT BIỂU ĐỒ */}
+      {/* MODAL CHI TIẾT DANH SÁCH PHIẾU/LỆNH HOẶC NHÂN SỰ VI PHẠM KHI NHẤP */}
       {/* ========================================================================= */}
       {drilldownType && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-in fade-in duration-150">
@@ -1944,10 +2305,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <div className="flex items-center gap-2.5">
                 <div
                   className={`p-2 rounded-xl text-white ${
-                    drilldownType === 'PCT'
+                    drilldownType === 'PCT' || drilldownType === 'PXVH_DOCS'
                       ? 'bg-blue-600'
                       : drilldownType === 'LCT'
                       ? 'bg-emerald-600'
+                      : drilldownType === 'PXVH_PERSONNEL'
+                      ? 'bg-blue-600'
+                      : drilldownType === 'PXSC_PERSONNEL' || drilldownType === 'PXSC_DOCS'
+                      ? 'bg-amber-600'
                       : 'bg-rose-600'
                   }`}
                 >
@@ -1955,6 +2320,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     <FileText className="w-5 h-5" />
                   ) : drilldownType === 'LCT' ? (
                     <FileCheck className="w-5 h-5" />
+                  ) : drilldownType === 'PXVH_PERSONNEL' || drilldownType === 'PXSC_PERSONNEL' ? (
+                    <Users className="w-5 h-5" />
+                  ) : drilldownType === 'PXVH_DOCS' || drilldownType === 'PXSC_DOCS' ? (
+                    <FileText className="w-5 h-5" />
                   ) : (
                     <AlertTriangle className="w-5 h-5" />
                   )}
@@ -1964,9 +2333,33 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     {drilldownType === 'PCT' && 'Danh sách Chi tiết Phiếu công tác (PCT) có vi phạm'}
                     {drilldownType === 'LCT' && 'Danh sách Chi tiết Lệnh công tác (LCT) có vi phạm'}
                     {drilldownType === 'ALL' && 'Danh sách Chi tiết Tất cả Phiếu & Lệnh công tác có vi phạm'}
+                    {drilldownType === 'PXVH_PERSONNEL' && 'Danh sách Nhân sự vi phạm — Phân xưởng Vận hành (PXVH)'}
+                    {drilldownType === 'PXSC_PERSONNEL' && 'Danh sách Nhân sự vi phạm — Phân xưởng Sửa chữa (PXSC)'}
+                    {drilldownType === 'PXVH_DOCS' && 'Danh sách Phiếu/Lệnh vi phạm — Phân xưởng Vận hành (PXVH)'}
+                    {drilldownType === 'PXSC_DOCS' && 'Danh sách Phiếu/Lệnh vi phạm — Phân xưởng Sửa chữa (PXSC)'}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu/lệnh vi phạm
+                    {drilldownType === 'PCT' && (
+                      <>Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu công tác vi phạm</>
+                    )}
+                    {drilldownType === 'LCT' && (
+                      <>Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> lệnh công tác vi phạm</>
+                    )}
+                    {drilldownType === 'ALL' && (
+                      <>Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu/lệnh vi phạm</>
+                    )}
+                    {drilldownType === 'PXVH_PERSONNEL' && (
+                      <>Tổng cộng: <strong className="text-blue-700 font-bold">{filteredVhPersonnel.length}</strong> nhân sự vi phạm ({vhViolationCount} lỗi thuộc PXVH)</>
+                    )}
+                    {drilldownType === 'PXSC_PERSONNEL' && (
+                      <>Tổng cộng: <strong className="text-amber-700 font-bold">{filteredScPersonnel.length}</strong> nhân sự vi phạm ({scViolationCount} lỗi thuộc PXSC)</>
+                    )}
+                    {drilldownType === 'PXVH_DOCS' && (
+                      <>Tổng cộng: <strong className="text-blue-700 font-bold">{filteredVhDocs.length}</strong> phiếu/lệnh có lỗi thuộc trách nhiệm PXVH</>
+                    )}
+                    {drilldownType === 'PXSC_DOCS' && (
+                      <>Tổng cộng: <strong className="text-amber-700 font-bold">{filteredScDocs.length}</strong> phiếu/lệnh có lỗi thuộc trách nhiệm PXSC</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1987,103 +2380,345 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   type="text"
                   value={modalSearchTerm}
                   onChange={(e) => setModalSearchTerm(e.target.value)}
-                  placeholder="Tìm kiếm nhanh mã phiếu, người CHTT, nội dung vi phạm..."
+                  placeholder={
+                    drilldownType === 'PXVH_PERSONNEL' || drilldownType === 'PXSC_PERSONNEL'
+                      ? 'Tìm kiếm nhanh theo họ tên nhân sự, chức danh, mã phiếu hoặc lỗi vi phạm...'
+                      : 'Tìm kiếm nhanh mã phiếu, người CHTT, đơn vị hoặc nội dung vi phạm...'
+                  }
                   className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
                 />
               </div>
             </div>
 
-            {/* Modal Body / Table of records */}
+            {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
-              {activeModalRecords.length === 0 ? (
-                <div className="py-12 text-center text-slate-400">
-                  <ShieldAlert className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs">Không tìm thấy phiếu/lệnh vi phạm nào phù hợp với từ khóa.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activeModalRecords.map((rec, idx) => (
-                    <div
-                      key={rec.id || idx}
-                      className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-blue-300 hover:shadow-xs transition"
-                    >
-                      {/* Top Bar: Code, Type, Date, Personnel */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-slate-400">#{idx + 1}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                              rec.documentType === 'PCT'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}
-                          >
-                            {rec.documentType}
-                          </span>
-                          <span className="font-mono text-sm font-black text-slate-900">
-                            {rec.code}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono">
-                          Ngày kiểm: {rec.auditDate || `Tháng ${rec.month}/${rec.year}`}
-                        </div>
-                      </div>
+              {/* TRƯỜNG HỢP 1: NHÂN SỰ VI PHẠM (PXVH hoặc PXSC) */}
+              {(drilldownType === 'PXVH_PERSONNEL' || drilldownType === 'PXSC_PERSONNEL') && (
+                (() => {
+                  const pList = drilldownType === 'PXVH_PERSONNEL' ? filteredVhPersonnel : filteredScPersonnel;
+                  const isVh = drilldownType === 'PXVH_PERSONNEL';
 
-                      {/* Content: Job & Personnel */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2.5 text-xs">
-                        <div>
-                          <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
-                            Công việc & Đơn vị:
-                          </span>
-                          <p className="font-semibold text-slate-800">{rec.jobName}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{rec.unit}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
-                            Nhân sự phụ trách:
-                          </span>
-                          <p className="text-slate-700">
-                            Người CHTT: <strong className="text-slate-900">{rec.leader}</strong>
-                          </p>
-                          <p className="text-slate-600 text-[11px]">
-                            Người cấp phiếu: {rec.issuer}
-                          </p>
-                          {rec.approver && !rec.approver.includes('Không áp dụng') && (
-                            <p className="text-slate-500 text-[11px]">
-                              Người cho phép: {rec.approver}
-                            </p>
-                          )}
-                        </div>
+                  if (pList.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-400">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs">Không tìm thấy nhân sự vi phạm nào phù hợp với từ khóa.</p>
                       </div>
+                    );
+                  }
 
-                      {/* Errors list for this document */}
-                      <div className="mt-2 pt-2 border-t border-slate-200">
-                        <span className="text-[10px] font-bold uppercase text-rose-700 tracking-wider flex items-center gap-1 mb-1.5">
-                          <AlertTriangle className="w-3 h-3 text-rose-600" />
-                          <span>Nội dung vi phạm phát hiện ({rec.parsedErrors.length} lỗi):</span>
-                        </span>
-                        <div className="space-y-1.5">
-                          {rec.parsedErrors.map((err, eIdx) => (
-                            <div
-                              key={err.id || eIdx}
-                              className="bg-white p-2.5 rounded-lg border border-rose-200 text-xs flex items-start gap-2"
-                            >
-                              <span className="text-rose-600 font-black text-sm leading-tight">•</span>
-                              <div className="flex-1">
-                                <p className="text-slate-800 font-medium">{err.message}</p>
-                                {err.ruleReference && (
-                                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                    Căn cứ: {err.ruleReference}
-                                  </p>
-                                )}
+                  return (
+                    <div className="space-y-4">
+                      {pList.map((person, idx) => (
+                        <div
+                          key={person.name || idx}
+                          className={`p-4 rounded-xl border ${
+                            isVh ? 'border-blue-200 bg-blue-50/20' : 'border-amber-200 bg-amber-50/20'
+                          } hover:bg-white hover:shadow-xs transition`}
+                        >
+                          {/* Person Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-full ${
+                                  isVh ? 'bg-blue-600' : 'bg-amber-600'
+                                } text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs`}
+                              >
+                                {person.name.charAt(0)}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                  <span>{person.name}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                      isVh ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-900'
+                                    }`}
+                                  >
+                                    {person.role}
+                                  </span>
+                                </h4>
+                                <p className="text-[11px] text-slate-500 font-medium">{person.unit}</p>
                               </div>
                             </div>
-                          ))}
+
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-bold font-mono">
+                                {person.violationCount} lỗi vi phạm
+                              </span>
+                              <span
+                                className={`px-2.5 py-1 rounded-full ${
+                                  isVh ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-900'
+                                } text-xs font-bold font-mono`}
+                              >
+                                {person.docs.length} phiếu/lệnh liên quan
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Chi tiết từng phiếu và lỗi vi phạm của người này */}
+                          <div className="mt-3 space-y-2">
+                            <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+                              Chi tiết các phiếu/lệnh & sai sót cụ thể của nhân sự:
+                            </span>
+                            {person.docs.map((d, dIdx) => (
+                              <div
+                                key={dIdx}
+                                className="bg-white p-3 rounded-lg border border-slate-200 text-xs shadow-2xs"
+                              >
+                                <div className="flex items-center justify-between gap-2 text-[11px] pb-1.5 border-b border-slate-100 font-mono mb-1.5">
+                                  <span
+                                    className={`font-bold ${
+                                      isVh ? 'text-blue-700' : 'text-amber-800'
+                                    } flex items-center gap-1.5`}
+                                  >
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded ${
+                                        isVh ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                                      } font-bold`}
+                                    >
+                                      {d.docType}
+                                    </span>
+                                    <span>{d.code}</span>
+                                  </span>
+                                  <span className="text-slate-500">{d.date}</span>
+                                </div>
+                                <div className="text-slate-700 mb-1.5">
+                                  <strong className="text-slate-900">Công việc:</strong> {d.jobName}
+                                </div>
+                                <div className="bg-rose-50/80 p-2.5 rounded-lg border border-rose-100 text-rose-900 text-xs">
+                                  <p className="font-medium flex items-start gap-1.5">
+                                    <span className="text-rose-600 font-black">•</span>
+                                    <span>{d.content}</span>
+                                  </p>
+                                  {d.reason && (
+                                    <p className="text-[10px] text-rose-700/80 font-mono mt-1 pl-3">
+                                      Căn cứ: {d.reason}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
+              )}
+
+              {/* TRƯỜNG HỢP 2: PHIẾU/LỆNH VI PHẠM THEO PHÂN XƯỞNG (PXVH_DOCS hoặc PXSC_DOCS) */}
+              {(drilldownType === 'PXVH_DOCS' || drilldownType === 'PXSC_DOCS') && (
+                (() => {
+                  const docList = drilldownType === 'PXVH_DOCS' ? filteredVhDocs : filteredScDocs;
+                  const isVh = drilldownType === 'PXVH_DOCS';
+
+                  if (docList.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-400">
+                        <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs">Không tìm thấy phiếu/lệnh vi phạm nào phù hợp với từ khóa.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {docList.map((doc, idx) => (
+                        <div
+                          key={doc.docNumber || idx}
+                          className={`p-4 rounded-xl border ${
+                            isVh ? 'border-blue-200 bg-blue-50/20' : 'border-amber-200 bg-amber-50/20'
+                          } hover:bg-white hover:shadow-xs transition`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-slate-400">#{idx + 1}</span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                  doc.docType === 'PCT'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {doc.docType}
+                              </span>
+                              <span className="font-mono text-sm font-black text-slate-900">
+                                {doc.code}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-500 font-mono">
+                              Ngày thực hiện: {doc.date}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2.5 text-xs">
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
+                                Công việc & Đơn vị:
+                              </span>
+                              <p className="font-semibold text-slate-800">{doc.jobName}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">{doc.unit}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
+                                Nhân sự liên đới:
+                              </span>
+                              {doc.leader && (
+                                <p className="text-slate-700">
+                                  Người CHTT: <strong className="text-slate-900">{doc.leader}</strong>
+                                </p>
+                              )}
+                              {doc.issuer && (
+                                <p className="text-slate-600 text-[11px]">
+                                  Người cấp phiếu: {doc.issuer}
+                                </p>
+                              )}
+                              {'approver' in doc && (doc as any).approver && !(doc as any).approver.includes('Không áp dụng') && (
+                                <p className="text-slate-500 text-[11px]">
+                                  Người cho phép: {(doc as any).approver}
+                                </p>
+                              )}
+                              {'workers' in doc && (doc as any).workers && (
+                                <p className="text-slate-500 text-[11px]">
+                                  Nhân viên: {(doc as any).workers}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Errors list for this document */}
+                          <div className="mt-2 pt-2 border-t border-slate-200">
+                            <span className="text-[10px] font-bold uppercase text-rose-700 tracking-wider flex items-center gap-1 mb-1.5">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              <span>Lỗi thuộc trách nhiệm {isVh ? 'PXVH' : 'PXSC'} ({doc.violations.length} lỗi):</span>
+                            </span>
+                            <div className="space-y-1.5">
+                              {doc.violations.map((v, vIdx) => (
+                                <div
+                                  key={vIdx}
+                                  className="bg-white p-2.5 rounded-lg border border-rose-200 text-xs flex items-start gap-2 shadow-2xs"
+                                >
+                                  <span className="text-rose-600 font-black text-sm leading-tight">•</span>
+                                  <div className="flex-1">
+                                    <p className="text-slate-800 font-medium">{v.content}</p>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                      <span
+                                        className={`text-[10px] font-bold ${
+                                          isVh ? 'text-blue-700 bg-blue-50' : 'text-amber-800 bg-amber-50'
+                                        } px-1.5 py-0.5 rounded`}
+                                      >
+                                        Nhân sự: {v.person}
+                                      </span>
+                                      {v.reason && (
+                                        <span className="text-[10px] text-slate-500 font-mono">
+                                          Căn cứ: {v.reason}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
+              )}
+
+              {/* TRƯỜNG HỢP 3: XEM CHI TIẾT DANH SÁCH PHIẾU/LỆNH CHUNG (PCT, LCT, ALL) */}
+              {(drilldownType === 'PCT' || drilldownType === 'LCT' || drilldownType === 'ALL') && (
+                activeModalRecords.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <ShieldAlert className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs">Không tìm thấy phiếu/lệnh vi phạm nào phù hợp với từ khóa.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {activeModalRecords.map((rec, idx) => (
+                      <div
+                        key={rec.id || idx}
+                        className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-blue-300 hover:shadow-xs transition"
+                      >
+                        {/* Top Bar: Code, Type, Date, Personnel */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-400">#{idx + 1}</span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                rec.documentType === 'PCT'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {rec.documentType}
+                            </span>
+                            <span className="font-mono text-sm font-black text-slate-900">
+                              {rec.code}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono">
+                            Ngày kiểm: {rec.auditDate || `Tháng ${rec.month}/${rec.year}`}
+                          </div>
+                        </div>
+
+                        {/* Content: Job & Personnel */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2.5 text-xs">
+                          <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
+                              Công việc & Đơn vị:
+                            </span>
+                            <p className="font-semibold text-slate-800">{rec.jobName}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{rec.unit}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
+                              Nhân sự phụ trách:
+                            </span>
+                            <p className="text-slate-700">
+                              Người CHTT: <strong className="text-slate-900">{rec.leader}</strong>
+                            </p>
+                            <p className="text-slate-600 text-[11px]">
+                              Người cấp phiếu: {rec.issuer}
+                            </p>
+                            {rec.approver && !rec.approver.includes('Không áp dụng') && (
+                              <p className="text-slate-500 text-[11px]">
+                                Người cho phép: {rec.approver}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Errors list for this document */}
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <span className="text-[10px] font-bold uppercase text-rose-700 tracking-wider flex items-center gap-1 mb-1.5">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" />
+                            <span>Nội dung vi phạm phát hiện ({rec.parsedErrors.length} lỗi):</span>
+                          </span>
+                          <div className="space-y-1.5">
+                            {rec.parsedErrors.map((err, eIdx) => (
+                              <div
+                                key={err.id || eIdx}
+                                className="bg-white p-2.5 rounded-lg border border-rose-200 text-xs flex items-start gap-2"
+                              >
+                                <span className="text-rose-600 font-black text-sm leading-tight">•</span>
+                                <div className="flex-1">
+                                  <p className="text-slate-800 font-medium">{err.message}</p>
+                                  {err.ruleReference && (
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      Căn cứ: {err.ruleReference}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
 
