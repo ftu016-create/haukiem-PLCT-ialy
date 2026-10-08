@@ -91,8 +91,57 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
             <div className="text-2xl font-black text-purple-700 tracking-tight">
               {overview.totalPeopleWithErrors.toLocaleString('vi-VN')}
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">Người cấp / CHTT / Cho phép</p>
           </div>
+        </div>
+      </div>
+
+      {/* Secondary Row: Tỷ lệ vi phạm theo từng loại (PCT, LCT, Tổng) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* 1. Tỷ lệ Phiếu công tác (PCT) vi phạm (%) */}
+        <div className="bg-gradient-to-br from-blue-50/70 to-white rounded-2xl border border-blue-200/80 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-blue-800 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Tỷ lệ Phiếu công tác (PCT) vi phạm</span>
+            <Percent className="w-4 h-4 text-blue-600" />
+          </div>
+          <div className="text-2xl font-black text-blue-700 tracking-tight">
+            {overview.pctErrorRate}%
+          </div>
+          <p className="text-[11px] text-blue-700/80 mt-1">
+            {overview.pctWithErrors} trên tổng {overview.totalPCT} Phiếu công tác
+          </p>
+        </div>
+
+        {/* 2. Tỷ lệ Lệnh công tác (LCT) vi phạm (%) */}
+        <div className="bg-gradient-to-br from-emerald-50/70 to-white rounded-2xl border border-emerald-200/80 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-emerald-800 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Tỷ lệ Lệnh công tác (LCT) vi phạm</span>
+            <Percent className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="text-2xl font-black text-emerald-700 tracking-tight">
+            {overview.lctErrorRate}%
+          </div>
+          <p className="text-[11px] text-emerald-700/80 mt-1">
+            {overview.lctWithErrors} trên tổng {overview.totalLCT} Lệnh công tác
+          </p>
+        </div>
+
+        {/* 3. Tỷ lệ Tổng Phiếu và Lệnh vi phạm (%) */}
+        <div className="bg-gradient-to-br from-rose-50/70 to-white rounded-2xl border border-rose-200/80 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-rose-800 mb-1">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-bold uppercase tracking-wider">Tổng Phiếu & Lệnh vi phạm</span>
+              <span title="Công thức: (Phiếu/Lệnh có lỗi / Tổng Phiếu/Lệnh) * 100" className="cursor-help">
+                <HelpCircle className="w-3.5 h-3.5 text-rose-400" />
+              </span>
+            </div>
+            <Percent className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="text-2xl font-black text-rose-700 tracking-tight">
+            {overview.errorRate}%
+          </div>
+          <p className="text-[11px] text-rose-700/80 mt-1">
+            {overview.documentsWithErrors} trên tổng {overview.totalDocuments} Phiếu và Lệnh
+          </p>
         </div>
       </div>
     </div>

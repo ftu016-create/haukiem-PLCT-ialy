@@ -74,6 +74,7 @@ export interface NormalizedRecord {
   duplicateOfIndex?: number;
   hasSameCodeDiffData?: boolean;
   anomalyFlags: string[];
+  note?: string;
 }
 
 export interface AuditLogEntry {

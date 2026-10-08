@@ -12,6 +12,7 @@ import {
 import {
   createSignatureCanvasBase64,
   getMemberSignatureDataUri,
+  getSignaturePngBase64,
 } from './signatureService';
 
 function createDonutChartBase64(
@@ -22,7 +23,7 @@ function createDonutChartBase64(
 ): string {
   try {
     const canvas = document.createElement('canvas');
-    const size = 360;
+    const size = 240;
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
@@ -30,21 +31,20 @@ function createDonutChartBase64(
 
     const cx = size / 2;
     const cy = size / 2;
-    const radius = 130;
-    const strokeWidth = 36;
+    const radius = 88;
+    const strokeWidth = 26;
 
-    // 1. Nền trắng tinh để Word và các ứng dụng văn phòng hiển thị trung thực 100%
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
+    // 1. Transparent background
+    ctx.clearRect(0, 0, size, size);
 
-    // 2. Vòng tròn nền (Track ring)
+    // 2. Track ring
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.strokeStyle = trackColor;
     ctx.lineWidth = strokeWidth;
     ctx.stroke();
 
-    // 3. Vòng cung tiến độ (Progress arc)
+    // 3. Progress arc
     const validPct = Math.min(Math.max(percentage, 0), 100);
     if (validPct > 0) {
       const startAngle = -Math.PI / 2;
@@ -57,8 +57,8 @@ function createDonutChartBase64(
       ctx.stroke();
     }
 
-    // 4. Chữ số phần trăm ở tâm (Times New Roman đậm, số nguyên)
-    ctx.font = 'bold 64px "Times New Roman", Times, serif';
+    // 4. Center text: Percentage (bold Times New Roman, no decimals)
+    ctx.font = 'bold 44px "Times New Roman", Times, serif';
     ctx.fillStyle = primaryColor;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -93,7 +93,7 @@ function cleanMemberName(raw: string): string {
  * Xuất báo cáo chính thức sang định dạng Microsoft Word (.doc)
  * Tuân thủ đầy đủ thể thức văn bản hành chính EVN (Nghị định 30/2020/NĐ-CP)
  */
-export function exportToWord({
+export async function exportToWord({
   overview,
   records,
   personalStats,
@@ -161,8 +161,6 @@ export function exportToWord({
   const allViolations = [...pctViolations, ...lctViolations];
   const vhPersonsSet = new Set<string>();
   const scPersonsSet = new Set<string>();
-  const vhDocsSet = new Set<string>();
-  const scDocsSet = new Set<string>();
   let vhViolationCount = 0;
   let scViolationCount = 0;
 
@@ -170,12 +168,20 @@ export function exportToWord({
     if (v.vhialyPerson && v.vhialyPerson !== '/' && !v.vhialyPerson.toLowerCase().includes('chưa rõ')) {
       vhPersonsSet.add(v.vhialyPerson);
       vhViolationCount++;
-      vhDocsSet.add(v.docNumber);
     }
     if (v.pxscPerson && v.pxscPerson !== '/' && !v.pxscPerson.toLowerCase().includes('chưa rõ')) {
       scPersonsSet.add(v.pxscPerson);
       scViolationCount++;
-      scDocsSet.add(v.docNumber);
+    }
+  });
+
+  // Hồ sơ có vi phạm theo phân xưởng
+  const vhDocsSet = new Set<string>();
+  const scDocsSet = new Set<string>();
+  records.forEach((r) => {
+    if (r.result === 'Có sai sót' || r.errorCount > 0 || r.parsedErrors.length > 0) {
+      if (r.issuer || r.approver) vhDocsSet.add(r.id);
+      if (r.leader || r.workers) scDocsSet.add(r.id);
     }
   });
 
@@ -227,12 +233,13 @@ export function exportToWord({
   // Chữ ký Trưởng nhóm
   let leaderSigHtml = `<div style="height: 55px;"></div>`;
   if (isLeaderSigned) {
-    const leaderBase64 = wrapBase64(createSignatureCanvasBase64('Trần Thanh Chương'));
+    const leaderRaw = await getSignaturePngBase64('Trần Thanh Chương');
+    const leaderBase64 = wrapBase64(leaderRaw);
     if (leaderBase64) {
       mhtmlAttachments.push({ location: 'sig_leader.png', base64: leaderBase64 });
       leaderSigHtml = `
         <div style="height: 55px; text-align: center; margin: 2pt 0;">
-          <img src="cid:sig_leader.png" width="130" height="50" alt="Chữ ký Trần Thanh Chương" style="display: block; margin: 0 auto; border: none !important;" />
+          <img src="sig_leader.png" width="130" height="50" alt="Chữ ký Trần Thanh Chương" style="display: block; margin: 0 auto; border: none !important;" />
         </div>
       `;
     }
@@ -240,7 +247,8 @@ export function exportToWord({
 
   // Chữ ký từng thành viên
   const memberSigMap: Record<string, string> = {};
-  members.forEach((mName, idx) => {
+  for (let idx = 0; idx < members.length; idx++) {
+    const mName = members[idx];
     const cName = cleanMemberName(mName);
     let isSigned = true;
     if (signedMembers[mName] !== undefined) {
@@ -257,25 +265,40 @@ export function exportToWord({
     }
 
     if (isSigned) {
-      const sigImgBase64 = wrapBase64(createSignatureCanvasBase64(mName));
+      const sigRaw = await getSignaturePngBase64(mName);
+      const sigImgBase64 = wrapBase64(sigRaw);
       if (sigImgBase64) {
         const fileLoc = `sig_mem_${idx}.png`;
         mhtmlAttachments.push({ location: fileLoc, base64: sigImgBase64 });
         memberSigMap[mName] = fileLoc;
       }
     }
-  });
+  }
 
   const htmlContent = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
   <meta charset='utf-8'>
   <title>Báo cáo hậu kiểm PCT, LCT</title>
+  <!--[if gte mso 9]>
+  <xml>
+   <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+   </w:WordDocument>
+  </xml>
+  <![endif]-->
   <style>
-    @page Section1 {
-      size: 841.9pt 595.3pt; /* Khổ A4 Ngang chuẩn (Landscape 297mm x 210mm) */
+    @page {
+      size: 841.9pt 595.3pt; /* Khổ giấy A4 ngang (Landscape) */
       mso-page-orientation: landscape;
-      margin: 2.0cm 2.0cm 2.0cm 3.0cm; /* Lề chuẩn Nghị định 30 & EVN: Trên 2cm, Phải 2cm, Dưới 2cm, Trái 3cm */
+      margin: 2.0cm 2.0cm 2.0cm 2.5cm;
+    }
+    @page Section1 {
+      size: 841.9pt 595.3pt; /* Khổ giấy A4 ngang (Landscape) */
+      mso-page-orientation: landscape;
+      margin: 2.0cm 2.0cm 2.0cm 2.5cm; /* Trên 2cm, Dưới 2cm, Phải 2cm, Trái 2.5cm */
       mso-header-margin: 36.0pt;
       mso-footer-margin: 36.0pt;
       mso-paper-source: 0;
@@ -345,7 +368,7 @@ export function exportToWord({
       border-collapse: collapse;
       margin-top: 4pt;
       margin-bottom: 10pt;
-      font-size: 13pt;
+      font-size: 11pt;
     }
     table.data-table th, table.data-table td {
       border: 1px solid #000000;
@@ -486,230 +509,12 @@ export function exportToWord({
     </table>
 
     <!-- ========================================================================= -->
-    <!-- BIỂU ĐỒ CỘT SO SÁNH SỐ LIỆU PCT VÀ LCT (GIỐNG 100% GIAO DIỆN) -->
+    <!-- BIỂU ĐỒ CỘT SO SÁNH SỐ LIỆU PCT VÀ LCT (Thay thế 2 bảng tổng hợp cũ) -->
     <!-- ========================================================================= -->
-    <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; color: #000000;">
-      <b>* Tổng hợp so sánh số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
+    <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 4pt; color: #000000;">
+      <b>* Tổng hợp số liệu so sánh Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
     </p>
-
-    <!-- 2 Thẻ Biểu đồ so sánh trực quan PCT và LCT giống giao diện -->
-    <table style="width: 100%; border-collapse: collapse; margin-top: 6pt; margin-bottom: 10pt; table-layout: fixed; border: none !important;">
-      <tr>
-        <!-- Thẻ biểu đồ cột PCT -->
-        <td style="width: 48%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #2563eb; background-color: #f0f7ff; table-layout: fixed;">
-            <tr style="background-color: #2563eb;">
-              <td style="padding: 6pt 8pt; border: none !important; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                Phiếu công tác (PCT)
-              </td>
-              <td style="padding: 6pt 8pt; border: none !important; text-align: right; font-size: 10.5pt; font-weight: bold; color: #ffffff;">
-                Tỷ lệ sai sót: ${roundedPctErrorRate}%
-              </td>
-            </tr>
-            <tr>
-              <td colspan="2" style="padding: 8pt; border: none !important;">
-                <!-- 3 chỉ số then chốt PCT -->
-                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #bfdbfe; margin-bottom: 8pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Tổng cấp</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #0f172a;">${overview.totalPCT}</div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
-                      <div style="font-size: 9pt; color: #059669; font-weight: 500; margin-bottom: 2pt;">Hợp lệ</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #059669;">${overview.pctValid}</div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center;">
-                      <div style="font-size: 9pt; color: #e11d48; font-weight: 500; margin-bottom: 2pt;">Có lỗi</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #e11d48;">${overview.pctWithErrors}</div>
-                    </td>
-                  </tr>
-                </table>
-
-                <!-- Thanh tiến độ hợp lệ vs có lỗi PCT -->
-                <table style="width: 100%; border-collapse: collapse; border: none !important; margin: 4pt 0 2pt 0;">
-                  <tr>
-                    <td style="border: none !important; padding: 0; font-size: 9.5pt; color: #059669; font-weight: bold;">
-                      Hợp lệ: ${100 - roundedPctErrorRate}% (${overview.pctValid} phiếu)
-                    </td>
-                    <td style="border: none !important; padding: 0; text-align: right; font-size: 9.5pt; color: #e11d48; font-weight: bold;">
-                      Có lỗi: ${roundedPctErrorRate}% (${overview.pctWithErrors} phiếu)
-                    </td>
-                  </tr>
-                </table>
-                <table style="width: 100%; height: 14px; border-collapse: collapse; background-color: #e2e8f0; margin-top: 3pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: ${Math.max(100 - roundedPctErrorRate, 0)}%; background-color: #10b981; height: 14px; font-size: 1px; line-height: 1px;" title="Hợp lệ">&nbsp;</td>
-                    <td style="width: 2px; background-color: #ffffff; height: 14px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                    <td style="width: ${Math.max(roundedPctErrorRate, 0)}%; background-color: #ef4444; height: 14px; font-size: 1px; line-height: 1px;" title="Có lỗi">&nbsp;</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-
-        <!-- Cột đệm khoảng cách giữa 2 thẻ -->
-        <td style="width: 4%; padding: 0; border: none !important;">&nbsp;</td>
-
-        <!-- Thẻ biểu đồ cột LCT -->
-        <td style="width: 48%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #059669; background-color: #f0fdf4; table-layout: fixed;">
-            <tr style="background-color: #059669;">
-              <td style="padding: 6pt 8pt; border: none !important; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                Lệnh công tác (LCT)
-              </td>
-              <td style="padding: 6pt 8pt; border: none !important; text-align: right; font-size: 10.5pt; font-weight: bold; color: #ffffff;">
-                Tỷ lệ sai sót: ${roundedLctErrorRate}%
-              </td>
-            </tr>
-            <tr>
-              <td colspan="2" style="padding: 8pt; border: none !important;">
-                <!-- 3 chỉ số then chốt LCT -->
-                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #a7f3d0; margin-bottom: 8pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #d1fae5;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Tổng cấp</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #0f172a;">${overview.totalLCT}</div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #d1fae5;">
-                      <div style="font-size: 9pt; color: #059669; font-weight: 500; margin-bottom: 2pt;">Hợp lệ</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #059669;">${overview.lctValid}</div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center;">
-                      <div style="font-size: 9pt; color: #e11d48; font-weight: 500; margin-bottom: 2pt;">Có lỗi</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #e11d48;">${overview.lctWithErrors}</div>
-                    </td>
-                  </tr>
-                </table>
-
-                <!-- Thanh tiến độ hợp lệ vs có lỗi LCT -->
-                <table style="width: 100%; border-collapse: collapse; border: none !important; margin: 4pt 0 2pt 0;">
-                  <tr>
-                    <td style="border: none !important; padding: 0; font-size: 9.5pt; color: #059669; font-weight: bold;">
-                      Hợp lệ: ${100 - roundedLctErrorRate}% (${overview.lctValid} lệnh)
-                    </td>
-                    <td style="border: none !important; padding: 0; text-align: right; font-size: 9.5pt; color: #e11d48; font-weight: bold;">
-                      Có lỗi: ${roundedLctErrorRate}% (${overview.lctWithErrors} lệnh)
-                    </td>
-                  </tr>
-                </table>
-                <table style="width: 100%; height: 14px; border-collapse: collapse; background-color: #e2e8f0; margin-top: 3pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: ${Math.max(100 - roundedLctErrorRate, 0)}%; background-color: #10b981; height: 14px; font-size: 1px; line-height: 1px;" title="Hợp lệ">&nbsp;</td>
-                    <td style="width: 2px; background-color: #ffffff; height: 14px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                    <td style="width: ${Math.max(roundedLctErrorRate, 0)}%; background-color: #ef4444; height: 14px; font-size: 1px; line-height: 1px;" title="Có lỗi">&nbsp;</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    <!-- ========================================================================= -->
-    <!-- TỶ LỆ VI PHẠM (3 CỘT BIỂU ĐỒ TRÒN TRỰC QUAN - ĐƯA NGAY DƯỚI SO SÁNH PCT VÀ LCT) -->
-    <!-- ========================================================================= -->
-    <div class="section-title" style="margin-top: 14pt;">
-      <b>* Tỷ lệ vi phạm:</b>
-    </div>
-    <table style="width: 100%; border-collapse: collapse; margin-top: 8pt; margin-bottom: 14pt; table-layout: fixed; border: none !important;">
-      <tr>
-        <!-- Cột 1: PHIẾU CÔNG TÁC (PCT) -->
-        <td style="width: 31%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #2563eb; background-color: #ffffff; table-layout: fixed;">
-            <tr style="background-color: #2563eb;">
-              <td style="padding: 6pt 4pt; text-align: center; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                PHIẾU CÔNG TÁC (PCT)
-              </td>
-            </tr>
-            <tr>
-              <td style="padding: 10pt 6pt; text-align: center;">
-                <p align="center" style="margin: 0 0 6pt 0;">
-                  <img src="cid:chart_pct.png" width="130" height="130" alt="${roundedPctErrorRate}%" style="display: block; margin: 0 auto; width: 130px; height: 130px; border: none !important;" />
-                </p>
-                <table style="width: 100%; border-collapse: collapse; background-color: #eff6ff; border: 1px solid #bfdbfe; margin-top: 6pt; table-layout: fixed;">
-                  <tr>
-                    <td style="padding: 4pt 2pt; text-align: center; border-right: 1px solid #dbeafe; font-size: 9.5pt;">
-                      <span style="color: #64748b;">Tỷ lệ lỗi:</span> <b style="color: #2563eb; font-size: 11pt;">${roundedPctErrorRate}%</b>
-                    </td>
-                    <td style="padding: 4pt 2pt; text-align: center; font-size: 9.5pt;">
-                      <b style="color: #e11d48;">${overview.pctWithErrors}</b> / ${overview.totalPCT} phiếu
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-
-        <!-- Spacer 1 -->
-        <td style="width: 3.5%; padding: 0; border: none !important;">&nbsp;</td>
-
-        <!-- Cột 2: LỆNH CÔNG TÁC (LCT) -->
-        <td style="width: 31%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #059669; background-color: #ffffff; table-layout: fixed;">
-            <tr style="background-color: #059669;">
-              <td style="padding: 6pt 4pt; text-align: center; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                LỆNH CÔNG TÁC (LCT)
-              </td>
-            </tr>
-            <tr>
-              <td style="padding: 10pt 6pt; text-align: center;">
-                <p align="center" style="margin: 0 0 6pt 0;">
-                  <img src="cid:chart_lct.png" width="130" height="130" alt="${roundedLctErrorRate}%" style="display: block; margin: 0 auto; width: 130px; height: 130px; border: none !important;" />
-                </p>
-                <table style="width: 100%; border-collapse: collapse; background-color: #f0fdf4; border: 1px solid #a7f3d0; margin-top: 6pt; table-layout: fixed;">
-                  <tr>
-                    <td style="padding: 4pt 2pt; text-align: center; border-right: 1px solid #d1fae5; font-size: 9.5pt;">
-                      <span style="color: #64748b;">Tỷ lệ lỗi:</span> <b style="color: #059669; font-size: 11pt;">${roundedLctErrorRate}%</b>
-                    </td>
-                    <td style="padding: 4pt 2pt; text-align: center; font-size: 9.5pt;">
-                      <b style="color: #e11d48;">${overview.lctWithErrors}</b> / ${overview.totalLCT} lệnh
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-
-        <!-- Spacer 2 -->
-        <td style="width: 3.5%; padding: 0; border: none !important;">&nbsp;</td>
-
-        <!-- Cột 3: TỔNG PHIẾU + LỆNH LỖI -->
-        <td style="width: 31%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #e11d48; background-color: #ffffff; table-layout: fixed;">
-            <tr style="background-color: #e11d48;">
-              <td style="padding: 6pt 4pt; text-align: center; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                TỔNG PHIẾU + LỆNH LỖI
-              </td>
-            </tr>
-            <tr>
-              <td style="padding: 10pt 6pt; text-align: center;">
-                <p align="center" style="margin: 0 0 6pt 0;">
-                  <img src="cid:chart_total.png" width="130" height="130" alt="${roundedTotalErrorRate}%" style="display: block; margin: 0 auto; width: 130px; height: 130px; border: none !important;" />
-                </p>
-                <table style="width: 100%; border-collapse: collapse; background-color: #fff1f2; border: 1px solid #fecdd3; margin-top: 6pt; table-layout: fixed;">
-                  <tr>
-                    <td style="padding: 4pt 2pt; text-align: center; border-right: 1px solid #ffe4e6; font-size: 9.5pt;">
-                      <span style="color: #64748b;">Tỷ lệ lỗi:</span> <b style="color: #e11d48; font-size: 11pt;">${roundedTotalErrorRate}%</b>
-                    </td>
-                    <td style="padding: 4pt 2pt; text-align: center; font-size: 9.5pt;">
-                      <b style="color: #e11d48;">${overview.documentsWithErrors}</b> / ${overview.totalDocuments} hồ sơ
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    <!-- Bảng số liệu chi tiết so sánh PCT và LCT -->
-    <table class="data-table" style="margin-top: 4pt; margin-bottom: 12pt; table-layout: fixed;">
+    <table class="data-table" style="margin-top: 4pt; margin-bottom: 12pt;">
       <thead>
         <tr>
           <th style="width: 25%;">Phân loại</th>
@@ -745,151 +550,97 @@ export function exportToWord({
     </table>
 
     <!-- ========================================================================= -->
-    <!-- BIỂU ĐỒ SO SÁNH VI PHẠM THEO PHÂN XƯỞNG (GIỐNG 100% GIAO DIỆN) -->
+    <!-- BIỂU ĐỒ SO SÁNH VI PHẠM THEO PHÂN XƯỞNG (TRỰC QUAN, RÕ RÀNG, DỄ NHÌN) -->
     <!-- ========================================================================= -->
-    <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; color: #000000;">
-      <b>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</b>
+    <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 4pt; color: #000000;">
+      <b>* So sánh tỷ lệ vi phạm theo phân xưởng (PXVH vs PXSC):</b>
     </p>
-
-    <!-- Hai thẻ đối sánh 2 phân xưởng PXVH và PXSC -->
-    <table style="width: 100%; border-collapse: collapse; margin-top: 6pt; margin-bottom: 10pt; table-layout: fixed; border: none !important;">
+    <table class="header-table" style="width: 100%; border-collapse: separate; border-spacing: 8pt 0; margin-top: 4pt; margin-bottom: 8pt; border: none !important;">
       <tr>
-        <!-- Cột Phân xưởng Vận hành (PXVH) -->
-        <td style="width: 48%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #1e40af; background-color: #eff6ff; table-layout: fixed;">
-            <tr style="background-color: #1e40af;">
-              <td style="padding: 6pt 8pt; border: none !important; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                Phân xưởng Vận hành (PXVH)
-              </td>
-              <td style="padding: 6pt 8pt; border: none !important; text-align: right; font-size: 10.5pt; font-weight: bold; color: #ffffff;">
-                Tỷ trọng: ${vhErrorShare}% tổng lỗi
-              </td>
-            </tr>
-            <tr>
-              <td colspan="2" style="padding: 8pt; border: none !important;">
-                <!-- 3 chỉ số then chốt PXVH -->
-                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #bfdbfe; margin-bottom: 8pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Nhân sự vi phạm</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #1e3a8a;">${vhPersonsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">người</span></div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Phiếu/lệnh vi phạm</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #1e3a8a;">${vhDocsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">phiếu</span></div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center;">
-                      <div style="font-size: 9pt; color: #e11d48; font-weight: 500; margin-bottom: 2pt;">Tổng số lỗi</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #e11d48;">${vhViolationCount} <span style="font-size: 9pt; font-weight: normal; color: #e11d48;">lỗi</span></div>
-                    </td>
-                  </tr>
-                </table>
-
-                <!-- Thanh tỷ trọng vi phạm PXVH -->
-                <table style="width: 100%; border-collapse: collapse; border: none !important; margin: 3pt 0 2pt 0;">
-                  <tr>
-                    <td style="border: none !important; padding: 0; font-size: 9.5pt; color: #1e40af; font-weight: bold;">
-                      Phần lỗi của PXVH: ${vhViolationCount}/${totalWorkshopErrors} lỗi
-                    </td>
-                    <td style="border: none !important; padding: 0; text-align: right; font-size: 9.5pt; color: #1e40af; font-weight: bold;">
-                      ${vhErrorShare}%
-                    </td>
-                  </tr>
-                </table>
-                <table style="width: 100%; height: 12px; border-collapse: collapse; background-color: #bfdbfe; margin-top: 2pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: ${vhErrorShare}%; background-color: #2563eb; height: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                    <td style="width: ${100 - vhErrorShare}%; background-color: #bfdbfe; height: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+        <!-- Cột Phân xưởng Vận hành -->
+        <td style="width: 50%; border: 1px solid #93c5fd; background-color: #eff6ff; padding: 8pt; vertical-align: top; text-align: left;">
+          <div style="font-size: 11pt; font-weight: bold; color: #1e40af; text-transform: uppercase; margin-bottom: 3pt;">
+            Phân xưởng Vận hành (PXVH)
+          </div>
+          <div style="font-size: 20pt; font-weight: bold; color: #1d4ed8; line-height: 1.1; margin-bottom: 4pt;">
+            ${vhErrorShare}% <span style="font-size: 10pt; font-weight: normal; color: #475569;">tỷ lệ vi phạm</span>
+          </div>
+          <div style="font-size: 11pt; color: #1e293b; line-height: 1.4;">
+            &bull; Nhân sự vi phạm: <b>${vhPersonsSet.size} người</b><br />
+            &bull; Phiếu/lệnh vi phạm: <b>${vhDocsSet.size}</b><br />
+            &bull; Tổng số lỗi phát hiện: <b>${vhViolationCount} lỗi</b>
+          </div>
         </td>
 
-        <!-- Cột đệm khoảng cách giữa 2 thẻ phân xưởng -->
-        <td style="width: 4%; padding: 0; border: none !important;">&nbsp;</td>
-
-        <!-- Cột Phân xưởng Sửa chữa (PXSC) -->
-        <td style="width: 48%; vertical-align: top; padding: 0; border: none !important;">
-          <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid #c2410c; background-color: #fff7ed; table-layout: fixed;">
-            <tr style="background-color: #c2410c;">
-              <td style="padding: 6pt 8pt; border: none !important; font-size: 11pt; font-weight: bold; color: #ffffff; text-transform: uppercase;">
-                Phân xưởng Sửa chữa (PXSC)
-              </td>
-              <td style="padding: 6pt 8pt; border: none !important; text-align: right; font-size: 10.5pt; font-weight: bold; color: #ffffff;">
-                Tỷ trọng: ${scErrorShare}% tổng lỗi
-              </td>
-            </tr>
-            <tr>
-              <td colspan="2" style="padding: 8pt; border: none !important;">
-                <!-- 3 chỉ số then chốt PXSC -->
-                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #fed7aa; margin-bottom: 8pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #ffedd5;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Nhân sự vi phạm</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #9a3412;">${scPersonsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">người</span></div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #ffedd5;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Phiếu/lệnh vi phạm</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #9a3412;">${scDocsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">phiếu</span></div>
-                    </td>
-                    <td style="width: 33.3%; padding: 6pt 4pt; text-align: center;">
-                      <div style="font-size: 9pt; color: #e11d48; font-weight: 500; margin-bottom: 2pt;">Tổng số lỗi</div>
-                      <div style="font-size: 14pt; font-weight: bold; color: #e11d48;">${scViolationCount} <span style="font-size: 9pt; font-weight: normal; color: #e11d48;">lỗi</span></div>
-                    </td>
-                  </tr>
-                </table>
-
-                <!-- Thanh tỷ trọng vi phạm PXSC -->
-                <table style="width: 100%; border-collapse: collapse; border: none !important; margin: 3pt 0 2pt 0;">
-                  <tr>
-                    <td style="border: none !important; padding: 0; font-size: 9.5pt; color: #c2410c; font-weight: bold;">
-                      Phần lỗi của PXSC: ${scViolationCount}/${totalWorkshopErrors} lỗi
-                    </td>
-                    <td style="border: none !important; padding: 0; text-align: right; font-size: 9.5pt; color: #c2410c; font-weight: bold;">
-                      ${scErrorShare}%
-                    </td>
-                  </tr>
-                </table>
-                <table style="width: 100%; height: 12px; border-collapse: collapse; background-color: #fed7aa; margin-top: 2pt; table-layout: fixed;">
-                  <tr>
-                    <td style="width: ${scErrorShare}%; background-color: #ea580c; height: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                    <td style="width: ${100 - scErrorShare}%; background-color: #fed7aa; height: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+        <!-- Cột Phân xưởng Sửa chữa -->
+        <td style="width: 50%; border: 1px solid #fed7aa; background-color: #fff7ed; padding: 8pt; vertical-align: top; text-align: left;">
+          <div style="font-size: 11pt; font-weight: bold; color: #c2410c; text-transform: uppercase; margin-bottom: 3pt;">
+            Phân xưởng Sửa chữa (PXSC)
+          </div>
+          <div style="font-size: 20pt; font-weight: bold; color: #ea580c; line-height: 1.1; margin-bottom: 4pt;">
+            ${scErrorShare}% <span style="font-size: 10pt; font-weight: normal; color: #475569;">tỷ lệ vi phạm</span>
+          </div>
+          <div style="font-size: 11pt; color: #1e293b; line-height: 1.4;">
+            &bull; Nhân sự vi phạm: <b>${scPersonsSet.size} người</b><br />
+            &bull; Phiếu/lệnh vi phạm: <b>${scDocsSet.size}</b><br />
+            &bull; Tổng số lỗi phát hiện: <b>${scViolationCount} lỗi</b>
+          </div>
         </td>
       </tr>
     </table>
 
-    <!-- Thanh tương quan phân bổ vi phạm toàn phân xưởng -->
-    <table style="width: 100%; border-collapse: collapse; margin-top: 6pt; margin-bottom: 14pt; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
-      <tr style="background-color: #f8fafc;">
-        <td style="padding: 5pt 10pt; font-size: 10pt; font-weight: bold; color: #1e40af; border: none !important;">
-          &bull; PXVH: ${vhErrorShare}% (${vhViolationCount} lỗi)
+    <!-- Thanh đối xứng tỷ lệ phần trăm phân xưởng -->
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2pt; margin-bottom: 14pt; border: 1px solid #cbd5e1;">
+      <tr>
+        <td style="width: ${vhErrorShare}%; background-color: #2563eb; color: #ffffff; text-align: center; padding: 5pt 2pt; font-size: 10.5pt; font-weight: bold;">
+          PXVH: ${vhErrorShare}% (${vhViolationCount} lỗi)
         </td>
-        <td style="padding: 5pt 10pt; font-size: 9.5pt; color: #64748b; text-align: center; border: none !important;">
-          Tương quan phân bổ vi phạm (100%)
-        </td>
-        <td style="padding: 5pt 10pt; font-size: 10pt; font-weight: bold; color: #ea580c; text-align: right; border: none !important;">
-          &bull; PXSC: ${scErrorShare}% (${scViolationCount} lỗi)
+        <td style="width: ${scErrorShare}%; background-color: #ea580c; color: #ffffff; text-align: center; padding: 5pt 2pt; font-size: 10.5pt; font-weight: bold;">
+          PXSC: ${scErrorShare}% (${scViolationCount} lỗi)
         </td>
       </tr>
+    </table>
+
+    <!-- ========================================================================= -->
+    <!-- TỶ LỆ VI PHẠM (Đổi tên từ 'Biểu đồ tỷ lệ vi phạm trực quan:') -->
+    <!-- ========================================================================= -->
+    <div class="section-title" style="margin-top: 14pt;">
+      <b>Tỷ lệ vi phạm:</b>
+    </div>
+    <table class="header-table" style="width: 100%; margin-top: 6pt; margin-bottom: 14pt; border: none !important;">
       <tr>
-        <td colspan="3" style="padding: 0; border: none !important;">
-          <table style="width: 100%; height: 22px; border-collapse: collapse; border: none !important;">
-            <tr>
-              <td style="width: ${vhErrorShare}%; background-color: #2563eb; color: #ffffff; text-align: center; font-size: 10pt; font-weight: bold; height: 22px; line-height: 22px; border: none !important;">
-                ${vhErrorShare > 10 ? `PXVH ${vhErrorShare}%` : ''}
-              </td>
-              <td style="width: ${scErrorShare}%; background-color: #ea580c; color: #ffffff; text-align: center; font-size: 10pt; font-weight: bold; height: 22px; line-height: 22px; border: none !important;">
-                ${scErrorShare > 10 ? `PXSC ${scErrorShare}%` : ''}
-              </td>
-            </tr>
-          </table>
+        <td style="width: 33.3%; padding: 4pt 2pt; vertical-align: top; text-align: center; border: none !important;" nowrap="nowrap">
+          <div style="font-weight: bold; font-size: 10pt; color: #1e40af; text-align: center; margin-bottom: 4pt; text-transform: uppercase; white-space: nowrap;">
+            PHIẾU CÔNG TÁC (PCT)
+          </div>
+          <div style="text-align: center; margin: 4pt 0;">
+            <img src="chart_pct.png" width="96" height="96" alt="${roundedPctErrorRate}%" style="display: block; margin: 0 auto; width: 96px; height: 96px; border: none !important;" />
+          </div>
+          <div style="font-size: 11pt; text-align: center; color: #000000; margin-top: 4pt; white-space: nowrap;">
+            <b>${overview.pctWithErrors}</b> / ${overview.totalPCT} phiếu có lỗi
+          </div>
+        </td>
+        <td style="width: 33.3%; padding: 4pt 2pt; vertical-align: top; text-align: center; border: none !important;" nowrap="nowrap">
+          <div style="font-weight: bold; font-size: 10pt; color: #065f46; text-align: center; margin-bottom: 4pt; text-transform: uppercase; white-space: nowrap;">
+            LỆNH CÔNG TÁC (LCT)
+          </div>
+          <div style="text-align: center; margin: 4pt 0;">
+            <img src="chart_lct.png" width="96" height="96" alt="${roundedLctErrorRate}%" style="display: block; margin: 0 auto; width: 96px; height: 96px; border: none !important;" />
+          </div>
+          <div style="font-size: 11pt; text-align: center; color: #000000; margin-top: 4pt; white-space: nowrap;">
+            <b>${overview.lctWithErrors}</b> / ${overview.totalLCT} lệnh có lỗi
+          </div>
+        </td>
+        <td style="width: 33.3%; padding: 4pt 2pt; vertical-align: top; text-align: center; border: none !important;" nowrap="nowrap">
+          <div style="font-weight: bold; font-size: 10pt; color: #9f1239; text-align: center; margin-bottom: 4pt; text-transform: uppercase; white-space: nowrap;">
+            TỔNG PHIẾU + LỆNH LỖI
+          </div>
+          <div style="text-align: center; margin: 4pt 0;">
+            <img src="chart_total.png" width="96" height="96" alt="${roundedTotalErrorRate}%" style="display: block; margin: 0 auto; width: 96px; height: 96px; border: none !important;" />
+          </div>
+          <div style="font-size: 11pt; text-align: center; color: #000000; margin-top: 4pt; white-space: nowrap;">
+            <b>${overview.documentsWithErrors}</b> / ${overview.totalDocuments} phiếu/lệnh có lỗi
+          </div>
         </td>
       </tr>
     </table>
@@ -925,7 +676,7 @@ export function exportToWord({
                     <div>${idx + 1}. ${name}</div>
                     ${
                       sigLoc
-                        ? `<div style="margin: 1pt 0 4pt 15pt;"><img src="cid:${sigLoc}" width="115" height="42" alt="Chữ ký ${name}" style="display: block; border: none !important;" /></div>`
+                        ? `<div style="margin: 1pt 0 4pt 15pt;"><img src="${sigLoc}" width="115" height="42" alt="Chữ ký ${name}" style="display: block; border: none !important;" /></div>`
                         : ''
                     }
                   </div>
@@ -942,7 +693,7 @@ export function exportToWord({
                     <div>${midPoint + idx + 1}. ${name}</div>
                     ${
                       sigLoc
-                        ? `<div style="margin: 1pt 0 4pt 15pt;"><img src="cid:${sigLoc}" width="115" height="42" alt="Chữ ký ${name}" style="display: block; border: none !important;" /></div>`
+                        ? `<div style="margin: 1pt 0 4pt 15pt;"><img src="${sigLoc}" width="115" height="42" alt="Chữ ký ${name}" style="display: block; border: none !important;" /></div>`
                         : ''
                     }
                   </div>
@@ -996,7 +747,6 @@ ${htmlContent}
 --${boundary}
 Content-Type: image/png
 Content-Transfer-Encoding: base64
-Content-ID: <${att.location}>
 Content-Location: ${att.location}
 
 ${att.base64}

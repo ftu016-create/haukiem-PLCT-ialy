@@ -680,8 +680,13 @@ export function calculateWorkshopAnalysis(
 
   records.forEach((rec) => {
     if (rec.result === 'Có sai sót' || rec.errorCount > 0 || rec.parsedErrors.length > 0) {
-      let recHasSC = false;
-      let recHasVH = false;
+      const respRoles = getResponsibleRolesFromErrors(rec.parsedErrors, rec.rawErrors);
+
+      const hasSC = respRoles.has('leader');
+      const hasVH = respRoles.has('issuer') || respRoles.has('approver');
+
+      if (hasSC) scViolationDocs.add(rec.id);
+      if (hasVH) vhViolationDocs.add(rec.id);
 
       rec.parsedErrors.forEach((err) => {
         const text = (err.message + ' ' + (err.ruleReference || '')).toLowerCase();
@@ -691,38 +696,21 @@ export function calculateWorkshopAnalysis(
           text.includes('chi huy') ||
           text.includes('nhân viên') ||
           text.includes('đội công tác') ||
-          text.includes('đơn vị công tác') ||
           text.includes('đct') ||
-          text.includes('điều 30') ||
-          text.includes('điều 14') ||
-          text.includes('tiếp đất di động');
-
-        const isVH =
-          text.includes('cho phép') ||
-          text.includes('cấp phiếu') ||
-          text.includes('cấp lệnh') ||
-          text.includes('ra lệnh') ||
-          text.includes('trực ban') ||
-          text.includes('trưởng ca') ||
-          text.includes('điều 31');
+          text.includes('điều 30');
 
         if (isSC) {
           scErrors++;
-          recHasSC = true;
           if (err.severity === 'CRITICAL') scCritical++;
           else if (err.severity === 'WARNING') scWarning++;
           else if (err.severity === 'INFO') scInfo++;
-        } else if (isVH) {
+        } else {
           vhErrors++;
-          recHasVH = true;
           if (err.severity === 'CRITICAL') vhCritical++;
           else if (err.severity === 'WARNING') vhWarning++;
           else if (err.severity === 'INFO') vhInfo++;
         }
       });
-
-      if (recHasSC) scViolationDocs.add(rec.id);
-      if (recHasVH) vhViolationDocs.add(rec.id);
     }
   });
 
@@ -839,21 +827,10 @@ export function getDetailedViolationList(records: NormalizedRecord[]): {
         errText.includes('ra lệnh') ||
         errText.includes('trực ban') ||
         errText.includes('trưởng ca') ||
-        errText.includes('điều 31') ||
-        errText.includes('điều 20') ||
-        errText.includes('nội dung công việc') ||
-        errText.includes('phạm vi làm việc') ||
-        errText.includes('khóa phiếu') ||
-        errText.includes('đơn vị vận hành') ||
-        errText.includes('thắt tiếp đất') ||
-        errText.includes('nghịch lý thời gian');
+        errText.includes('điều 31');
 
       if (isVH) {
-        if (
-          (errText.includes('cấp phiếu') || errText.includes('điều 20') || errText.includes('nội dung công việc')) &&
-          rec.issuer &&
-          !rec.issuer.toLowerCase().includes('chưa rõ')
-        ) {
+        if (errText.includes('cấp phiếu') && rec.issuer && !rec.issuer.toLowerCase().includes('chưa rõ')) {
           vhialyPerson = rec.issuer;
         } else if (
           (errText.includes('cấp lệnh') || errText.includes('ra lệnh')) &&
@@ -865,27 +842,19 @@ export function getDetailedViolationList(records: NormalizedRecord[]): {
           vhialyPerson = rec.approver;
         } else if (rec.issuer && !rec.issuer.toLowerCase().includes('chưa rõ')) {
           vhialyPerson = rec.issuer;
-        } else if (rec.orderGiver && !rec.orderGiver.toLowerCase().includes('chưa rõ')) {
-          vhialyPerson = rec.orderGiver;
         }
       }
 
       const isSC =
         errText.includes('chtt') ||
         errText.includes('chỉ huy') ||
-        errText.includes('chi huy') ||
         errText.includes('nhân viên') ||
         errText.includes('đct') ||
         errText.includes('đội công tác') ||
         errText.includes('đơn vị công tác') ||
         errText.includes('điều 30') ||
         errText.includes('điều 14') ||
-        errText.includes('điều 28') ||
-        errText.includes('tiếp đất di động') ||
-        errText.includes('kết thúc ngày làm việc') ||
-        errText.includes('kết thúc công việc') ||
-        errText.includes('rào chắn') ||
-        errText.includes('biển báo');
+        errText.includes('tiếp đất di động');
 
       if (isSC) {
         if (errText.includes('nhân viên') && rec.workers && !rec.workers.toLowerCase().includes('chưa rõ')) {
@@ -921,7 +890,7 @@ export function getDetailedViolationList(records: NormalizedRecord[]): {
         vhialyPerson,
         pxscPerson,
         reason,
-        note: (rec as any).notes || (rec as any).note || '',
+        note: rec.note || '',
       };
 
       if (rec.documentType === 'PCT') {

@@ -37,7 +37,7 @@ import { DataTable } from './components/DataTable';
 import { AuditView } from './components/AuditView';
 import { ReportView } from './components/ReportView';
 import { SettingsModal } from './components/SettingsModal';
-import { exportToWord, triggerPrintReport } from './utils/exportService';
+import { exportToWord } from './utils/exportService';
 import {
   Menu,
   X,
@@ -267,33 +267,17 @@ export default function App() {
   };
 
   // Export handlers
-  const handleExportWord = () => {
+  const handleExportWord = async () => {
     let savedRecs: string[] | undefined = undefined;
     let savedMembers: string[] | undefined = undefined;
-    let signedMembersMap: Record<string, boolean> = {};
-    let isLeaderSigned = true;
-    let docDateStr: string | undefined = undefined;
-
     try {
       const recRaw = localStorage.getItem('ialy_report_recommendations_v4');
       if (recRaw) savedRecs = JSON.parse(recRaw);
       const memRaw = localStorage.getItem('ialy_audit_members_v4');
       if (memRaw) savedMembers = JSON.parse(memRaw);
-      const signedRaw = localStorage.getItem('ialy_signed_members_map');
-      if (signedRaw) signedMembersMap = JSON.parse(signedRaw);
-      const leaderRaw = localStorage.getItem('ialy_leader_signed');
-      if (leaderRaw !== null) isLeaderSigned = JSON.parse(leaderRaw);
-
-      const dTrim = (localStorage.getItem('ialy_report_doc_day') || '').trim();
-      const mTrim = (localStorage.getItem('ialy_report_doc_month') || '').trim();
-      const yTrim = (localStorage.getItem('ialy_report_doc_year') || '2026').trim();
-      const dText = dTrim ? (dTrim.length === 1 ? '0' + dTrim : dTrim) : '.....';
-      const mText = mTrim ? (mTrim.length === 1 ? '0' + mTrim : mTrim) : '.....';
-      const yText = yTrim || '202...';
-      docDateStr = `Gia Lai, ngày ${dText} tháng ${mText} năm ${yText}`;
     } catch (e) {}
 
-    exportToWord({
+    await exportToWord({
       overview,
       records: filteredRecords,
       personalStats,
@@ -303,21 +287,7 @@ export default function App() {
       reportYear: filters.year === 'all' ? 2026 : filters.year,
       recommendationsText: savedRecs ? savedRecs.filter((r) => r.trim()).join('\n') : undefined,
       auditMembers: savedMembers,
-      documentDate: docDateStr,
-      signedMembers: signedMembersMap,
-      isLeaderSigned,
     });
-  };
-
-  const handleExportPDF = () => {
-    if (activeTab !== 'reports') {
-      setActiveTab('reports');
-      setTimeout(() => {
-        triggerPrintReport();
-      }, 300);
-    } else {
-      triggerPrintReport();
-    }
   };
 
   return (
