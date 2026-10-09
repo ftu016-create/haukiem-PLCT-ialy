@@ -65,9 +65,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Bộ lọc dữ liệu
-              </span>
+              
               {isFiltered && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
                   {activeFilterCount} điều kiện áp dụng
