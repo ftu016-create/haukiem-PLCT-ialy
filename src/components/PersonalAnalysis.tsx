@@ -224,7 +224,7 @@ export const PersonalAnalysis: React.FC<PersonalAnalysisProps> = ({
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-blue-600 font-semibold group-hover:translate-x-0.5 transition-transform">
-                  <span>Xem {person.documentsCount} Phiếu/Lệnh liên quan</span>
+                  <span>Xem chi tiết</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </div>
               </div>
