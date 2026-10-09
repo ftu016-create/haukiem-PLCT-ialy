@@ -64,8 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
                   <span>CÔNG TY THỦY ĐIỆN IALY</span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-600 font-medium">Hệ thống Giám sát & Thống kê An toàn</span>
+                  
                 </p>
               </div>
             </div>

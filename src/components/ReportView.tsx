@@ -1275,7 +1275,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5">
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
-              <span>* Tổng hợp số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</span>
+              <span>* Tổng hợp Phiếu công tác (PCT) và Lệnh công tác (LCT):</span>
             </h4>
           </div>
 
@@ -1383,9 +1383,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
               <span>* <b>Tỷ lệ vi phạm:</b></span>
             </h4>
-            <span className="text-[11px] text-slate-500 italic print:hidden">
-              (Nhấp vào từng cột để mở danh sách chi tiết các phiếu, lệnh vi phạm)
-            </span>
+            
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
@@ -1607,17 +1605,17 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
               {/* 3 chỉ số then chốt PXVH (Có thể nhấp để xem danh sách chi tiết) */}
               <div className="grid grid-cols-3 gap-3 text-center text-xs">
-                {/* 1. Nhân sự vi phạm */}
+                {/* 1. Người vi phạm */}
                 <div
                   onClick={() => {
                     setDrilldownType('PXVH_PERSONNEL');
                     setModalSearchTerm('');
                   }}
                   className="bg-white p-2.5 rounded-lg border border-blue-100 shadow-2xs print:border-blue-200 hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-xs transition cursor-pointer group"
-                  title="Nhấp để xem danh sách chi tiết nhân sự vi phạm của PXVH"
+                  title="Nhấp để xem danh sách chi tiết người vi phạm của PXVH"
                 >
                   <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
-                    <span>Nhân sự vi phạm</span>
+                    <span>Người vi phạm</span>
                     <ExternalLink className="w-2.5 h-2.5 text-blue-500 opacity-60 group-hover:opacity-100" />
                   </div>
                   <div className="text-base font-black text-blue-950 font-mono">
@@ -1700,17 +1698,17 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
               {/* 3 chỉ số then chốt PXSC (Có thể nhấp để xem danh sách chi tiết) */}
               <div className="grid grid-cols-3 gap-3 text-center text-xs">
-                {/* 1. Nhân sự vi phạm */}
+                {/* 1. Người vi phạm */}
                 <div
                   onClick={() => {
                     setDrilldownType('PXSC_PERSONNEL');
                     setModalSearchTerm('');
                   }}
                   className="bg-white p-2.5 rounded-lg border border-amber-100 shadow-2xs print:border-amber-200 hover:border-amber-500 hover:bg-amber-50/50 hover:shadow-xs transition cursor-pointer group"
-                  title="Nhấp để xem danh sách chi tiết nhân sự vi phạm của PXSC"
+                  title="Nhấp để xem danh sách chi tiết người vi phạm của PXSC"
                 >
                   <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
-                    <span>Nhân sự vi phạm</span>
+                    <span>Người vi phạm</span>
                     <ExternalLink className="w-2.5 h-2.5 text-amber-600 opacity-60 group-hover:opacity-100" />
                   </div>
                   <div className="text-base font-black text-amber-950 font-mono">
@@ -2287,7 +2285,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL CHI TIẾT DANH SÁCH PHIẾU/LỆNH HOẶC NHÂN SỰ VI PHẠM KHI NHẤP */}
+      {/* MODAL CHI TIẾT DANH SÁCH PHIẾU/LỆNH HOẶC NGƯỜI VI PHẠM KHI NHẤP */}
       {/* ========================================================================= */}
       {drilldownType && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-in fade-in duration-150">
@@ -2325,8 +2323,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     {drilldownType === 'PCT' && 'Danh sách Chi tiết Phiếu công tác (PCT) có vi phạm'}
                     {drilldownType === 'LCT' && 'Danh sách Chi tiết Lệnh công tác (LCT) có vi phạm'}
                     {drilldownType === 'ALL' && 'Danh sách Chi tiết Tất cả Phiếu & Lệnh công tác có vi phạm'}
-                    {drilldownType === 'PXVH_PERSONNEL' && 'Danh sách Nhân sự vi phạm — Phân xưởng Vận hành (PXVH)'}
-                    {drilldownType === 'PXSC_PERSONNEL' && 'Danh sách Nhân sự vi phạm — Phân xưởng Sửa chữa (PXSC)'}
+                    {drilldownType === 'PXVH_PERSONNEL' && 'Danh sách Người vi phạm — Phân xưởng Vận hành (PXVH)'}
+                    {drilldownType === 'PXSC_PERSONNEL' && 'Danh sách Người vi phạm — Phân xưởng Sửa chữa (PXSC)'}
                     {drilldownType === 'PXVH_DOCS' && 'Danh sách Phiếu/Lệnh vi phạm — Phân xưởng Vận hành (PXVH)'}
                     {drilldownType === 'PXSC_DOCS' && 'Danh sách Phiếu/Lệnh vi phạm — Phân xưởng Sửa chữa (PXSC)'}
                   </h3>
@@ -2341,10 +2339,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
                       <>Tổng cộng: <strong className="text-rose-600 font-bold">{activeModalRecords.length}</strong> phiếu/lệnh vi phạm</>
                     )}
                     {drilldownType === 'PXVH_PERSONNEL' && (
-                      <>Tổng cộng: <strong className="text-blue-700 font-bold">{filteredVhPersonnel.length}</strong> nhân sự vi phạm ({vhViolationCount} lỗi thuộc PXVH)</>
+                      <>Tổng cộng: <strong className="text-blue-700 font-bold">{filteredVhPersonnel.length}</strong> người vi phạm ({vhViolationCount} lỗi thuộc PXVH)</>
                     )}
                     {drilldownType === 'PXSC_PERSONNEL' && (
-                      <>Tổng cộng: <strong className="text-amber-700 font-bold">{filteredScPersonnel.length}</strong> nhân sự vi phạm ({scViolationCount} lỗi thuộc PXSC)</>
+                      <>Tổng cộng: <strong className="text-amber-700 font-bold">{filteredScPersonnel.length}</strong> người vi phạm ({scViolationCount} lỗi thuộc PXSC)</>
                     )}
                     {drilldownType === 'PXVH_DOCS' && (
                       <>Tổng cộng: <strong className="text-blue-700 font-bold">{filteredVhDocs.length}</strong> phiếu/lệnh có lỗi thuộc trách nhiệm PXVH</>
@@ -2384,7 +2382,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
-              {/* TRƯỜNG HỢP 1: NHÂN SỰ VI PHẠM (PXVH hoặc PXSC) */}
+              {/* TRƯỜNG HỢP 1: NGƯỜI VI PHẠM (PXVH hoặc PXSC) */}
               {(drilldownType === 'PXVH_PERSONNEL' || drilldownType === 'PXSC_PERSONNEL') && (
                 (() => {
                   const pList = drilldownType === 'PXVH_PERSONNEL' ? filteredVhPersonnel : filteredScPersonnel;
@@ -2394,7 +2392,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     return (
                       <div className="py-12 text-center text-slate-400">
                         <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="text-xs">Không tìm thấy nhân sự vi phạm nào phù hợp với từ khóa.</p>
+                        <p className="text-xs">Không tìm thấy người vi phạm nào phù hợp với từ khóa.</p>
                       </div>
                     );
                   }

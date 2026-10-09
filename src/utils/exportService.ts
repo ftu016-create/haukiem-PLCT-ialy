@@ -489,7 +489,7 @@ export function exportToWord({
     <!-- BIỂU ĐỒ CỘT SO SÁNH SỐ LIỆU PCT VÀ LCT (GIỐNG 100% GIAO DIỆN) -->
     <!-- ========================================================================= -->
     <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; color: #000000;">
-      <b>* Tổng hợp số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
+      <b>* Tổng hợp Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
     </p>
 
     <!-- 2 Thẻ Biểu đồ so sánh trực quan PCT và LCT giống giao diện -->
@@ -771,7 +771,7 @@ export function exportToWord({
                 <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #bfdbfe; margin-bottom: 8pt; table-layout: fixed;">
                   <tr>
                     <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Nhân sự vi phạm</div>
+                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Người vi phạm</div>
                       <div style="font-size: 14pt; font-weight: bold; color: #1e3a8a;">${vhPersonsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">người</span></div>
                     </td>
                     <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #dbeafe;">
@@ -827,7 +827,7 @@ export function exportToWord({
                 <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #fed7aa; margin-bottom: 8pt; table-layout: fixed;">
                   <tr>
                     <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #ffedd5;">
-                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Nhân sự vi phạm</div>
+                      <div style="font-size: 9pt; color: #64748b; margin-bottom: 2pt;">Người vi phạm</div>
                       <div style="font-size: 14pt; font-weight: bold; color: #9a3412;">${scPersonsSet.size} <span style="font-size: 9pt; font-weight: normal; color: #64748b;">người</span></div>
                     </td>
                     <td style="width: 33.3%; padding: 6pt 4pt; text-align: center; border-right: 1px solid #ffedd5;">
