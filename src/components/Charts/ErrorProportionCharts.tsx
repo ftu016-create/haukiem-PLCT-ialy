@@ -174,7 +174,7 @@ const DonutItem: React.FC<DonutChartProps> = ({
       {/* Action Footer */}
       <div className="mt-3 pt-2.5 border-t border-slate-100 text-center">
         <span className="text-xs font-bold text-blue-600 group-hover:text-blue-800 inline-flex items-center gap-1">
-          <span>Xem danh sách chi tiết ({errorCount} bản ghi vi phạm)</span>
+          <span>Xem danh sách chi tiết </span>
           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
         </span>
       </div>
