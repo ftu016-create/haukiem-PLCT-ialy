@@ -1275,7 +1275,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5">
               <BarChart3 className="w-4 h-4 text-blue-600 print:hidden" />
-              <span>* Tổng hợp so sánh số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</span>
+              <span>* Tổng hợp số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</span>
             </h4>
           </div>
 
@@ -1572,11 +1572,9 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-xs sm:text-sm font-bold text-slate-800 print:text-black flex items-center gap-1.5 print:text-[13pt]">
               <Users className="w-4 h-4 text-blue-600 print:hidden" />
-              <span>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</span>
+              <span>* Biểu đồ vi phạm theo phân xưởng:</span>
             </h4>
-            <span className="text-[11px] text-slate-500 italic print:hidden">
-              (Nhấp vào ô nhân sự hoặc ô phiếu vi phạm để xem danh sách chi tiết)
-            </span>
+            
           </div>
 
           {/* Hai thẻ đối sánh trực quan 2 phân xưởng PXVH và PXSC */}
@@ -1775,9 +1773,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
                 PXVH: {vhPercentage}% ({vhViolationCount} lỗi)
               </span>
-              <span className="text-[11px] text-slate-500 font-medium">
-                Tương quan phân bổ vi phạm (100%)
-              </span>
+              
               <span className="flex items-center gap-1.5 text-amber-700">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
                 PXSC: {scPercentage}% ({scViolationCount} lỗi)
@@ -1812,7 +1808,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               {isAdmin ? (
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 print:hidden">
                   <ShieldCheck className="w-3 h-3 text-purple-600" />
-                  <span>Quyền Admin (Được chỉnh sửa)</span>
+                  
                 </span>
               ) : (
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 print:hidden">
@@ -1967,13 +1963,9 @@ export const ReportView: React.FC<ReportViewProps> = ({
             <div>
               <h4 className="font-bold text-sm sm:text-[13pt] print:text-[13pt] text-slate-900 print:text-black">
                 <b>Các thành viên tham gia hậu kiểm:</b>
-                <span className="text-[11px] text-slate-500 font-normal italic ml-2 print:hidden">
-                  ({auditMembers.length} thành viên)
-                </span>
+                
               </h4>
-              <p className="text-[11px] text-blue-700 font-medium print:hidden mt-0.5">
-                Tích chọn người nào để tự động chèn chữ ký của người đó vào văn bản
-              </p>
+              
             </div>
 
             {/* Các nút công cụ chữ ký trên Web */}
@@ -2674,7 +2666,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                           </div>
                           <div className="space-y-1">
                             <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
-                              Nhân sự phụ trách:
+                              Chức danh liên quan:
                             </span>
                             <p className="text-slate-700">
                               Người CHTT: <strong className="text-slate-900">{rec.leader}</strong>

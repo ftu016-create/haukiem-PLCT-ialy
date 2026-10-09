@@ -148,12 +148,12 @@ export const DataTable: React.FC<DataTableProps> = ({ records, onSelectRecord })
                 className="py-3 px-3 min-w-[170px] cursor-pointer hover:bg-slate-200/70 transition"
               >
                 <div className="flex items-center gap-1">
-                  <span>Mã PCT / LCT</span>
+                  <span>Số PCT / LCT</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
               <th className="py-3 px-3 min-w-[200px]">Tên công việc & Đơn vị</th>
-              <th className="py-3 px-3 min-w-[160px]">Nhân sự phụ trách</th>
+              <th className="py-3 px-3 min-w-[160px]">Chức danh liên quan</th>
               <th className="py-3 px-3 text-center w-24">Kết quả</th>
               <th
                 onClick={() => toggleSort('errors')}

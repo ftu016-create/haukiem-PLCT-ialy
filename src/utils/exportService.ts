@@ -489,7 +489,7 @@ export function exportToWord({
     <!-- BIỂU ĐỒ CỘT SO SÁNH SỐ LIỆU PCT VÀ LCT (GIỐNG 100% GIAO DIỆN) -->
     <!-- ========================================================================= -->
     <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; color: #000000;">
-      <b>* Tổng hợp so sánh số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
+      <b>* Tổng hợp số liệu Phiếu công tác (PCT) và Lệnh công tác (LCT):</b>
     </p>
 
     <!-- 2 Thẻ Biểu đồ so sánh trực quan PCT và LCT giống giao diện -->
@@ -748,7 +748,7 @@ export function exportToWord({
     <!-- BIỂU ĐỒ SO SÁNH VI PHẠM THEO PHÂN XƯỞNG (GIỐNG 100% GIAO DIỆN) -->
     <!-- ========================================================================= -->
     <p style="font-weight: bold; font-size: 13pt; margin-top: 14pt; margin-bottom: 6pt; color: #000000;">
-      <b>* Biểu đồ so sánh số người và vi phạm theo phân xưởng:</b>
+      <b>* Biểu đồ vi phạm theo phân xưởng:</b>
     </p>
 
     <!-- Hai thẻ đối sánh 2 phân xưởng PXVH và PXSC -->
@@ -871,9 +871,7 @@ export function exportToWord({
         <td style="padding: 5pt 10pt; font-size: 10pt; font-weight: bold; color: #1e40af; border: none !important;">
           &bull; PXVH: ${vhErrorShare}% (${vhViolationCount} lỗi)
         </td>
-        <td style="padding: 5pt 10pt; font-size: 9.5pt; color: #64748b; text-align: center; border: none !important;">
-          Tương quan phân bổ vi phạm (100%)
-        </td>
+        
         <td style="padding: 5pt 10pt; font-size: 10pt; font-weight: bold; color: #ea580c; text-align: right; border: none !important;">
           &bull; PXSC: ${scErrorShare}% (${scViolationCount} lỗi)
         </td>

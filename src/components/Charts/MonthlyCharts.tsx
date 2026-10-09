@@ -23,11 +23,9 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ monthlyData, targe
         <div>
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-blue-600" />
-            <span>Xu hướng 12 Tháng Năm {targetYear}</span>
+            <span>Năm {targetYear}</span>
           </h2>
-          <p className="text-xs text-slate-500">
-            Biểu đồ phân tích dữ liệu đối soát Phiếu & Lệnh công tác
-          </p>
+          
         </div>
 
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">

@@ -191,7 +191,7 @@ export const ErrorAnalysis: React.FC<ErrorAnalysisProps> = ({ records }) => {
                 <th className="py-3 px-3 w-10 text-center">STT</th>
                 <th className="py-3 px-3 min-w-[280px]">Nội dung vi phạm phát hiện</th>
                 <th className="py-3 px-3 min-w-[160px]">Nhóm vi phạm & Căn cứ</th>
-                <th className="py-3 px-3 min-w-[150px]">Mã PCT / LCT</th>
+                <th className="py-3 px-3 min-w-[150px]">Số PCT / LCT</th>
                 <th className="py-3 px-3 min-w-[140px]">Người CHTT</th>
                 <th className="py-3 px-3 w-24 text-center">Ngày kiểm</th>
               </tr>

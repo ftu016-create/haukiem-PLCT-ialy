@@ -91,7 +91,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ overview }) => {
             <div className="text-2xl font-black text-purple-700 tracking-tight">
               {overview.totalPeopleWithErrors.toLocaleString('vi-VN')}
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">Người cấp / CHTT / Cho phép</p>
+            
           </div>
         </div>
       </div>

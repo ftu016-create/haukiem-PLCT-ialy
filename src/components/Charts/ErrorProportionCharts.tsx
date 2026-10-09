@@ -425,7 +425,7 @@ export const ErrorProportionCharts: React.FC<ErrorProportionChartsProps> = ({
                         </div>
                         <div className="space-y-1">
                           <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">
-                            Nhân sự phụ trách:
+                            Chức danh liên quan:
                           </span>
                           <p className="text-slate-700">
                             Người CHTT: <strong className="text-slate-900">{rec.leader}</strong>
